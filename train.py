@@ -131,7 +131,7 @@ def main(args):
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
-        log_with=args.report_to,
+        log_with=None if args.report_to == "none" else args.report_to,
         project_config=accelerator_project_config,
     )
 
