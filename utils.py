@@ -155,6 +155,43 @@ def load_encoders(enc_type, device, resolution=256):
             encoder.load_state_dict(new_state_dict)
             encoder.forward_features = encoder.forward
 
+        elif encoder_type == 'meddinov3':
+            import sys as _sys
+            import os as _os
+            meddinov3_base = _os.environ.get(
+                'MEDDINOV3_PATH',
+                _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'MedDINOv3')
+            )
+            dinov3_pkg_path = _os.path.join(
+                meddinov3_base,
+                'nnUNet/nnunetv2/training/nnUNetTrainer/dinov3'
+            )
+            if dinov3_pkg_path not in _sys.path:
+                _sys.path.insert(0, dinov3_pkg_path)
+            from dinov3.models.vision_transformer import vit_base as _meddinov3_vit_base
+            encoder = _meddinov3_vit_base(
+                drop_path_rate=0.2,
+                layerscale_init=1.0e-05,
+                n_storage_tokens=4,
+                qkv_bias=False,
+                mask_k_bias=True,
+            )
+            ckpt_path = _os.environ.get(
+                'MEDDINOV3_CKPT',
+                _os.path.join(meddinov3_base, 'checkpoints/model.pth')
+            )
+            chkpt = torch.load(ckpt_path, map_location='cpu')
+            state_dict = {
+                k.replace('backbone.', ''): v
+                for k, v in chkpt['teacher'].items()
+                if 'ibot' not in k and 'dino_head' not in k
+            }
+            encoder.load_state_dict(state_dict, strict=False)
+            encoder.embed_dim = 768
+            encoder = encoder.to(device)
+            encoder.eval()
+            encoder.forward_features = encoder.forward
+
         encoders.append(encoder)
     
     return encoders, encoder_types, architectures
