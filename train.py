@@ -368,9 +368,9 @@ def main(args):
                 logging.info("Generating EMA samples done.")
 
             logs = {
-                "loss": accelerator.gather(loss_mean).mean().detach().item(), 
+                "loss": accelerator.gather(loss_mean).mean().detach().item(),
                 "proj_loss": accelerator.gather(proj_loss_mean).mean().detach().item(),
-                "grad_norm": accelerator.gather(grad_norm).mean().detach().item()
+                "grad_norm": accelerator.gather(grad_norm).mean().detach().item() if accelerator.sync_gradients else 0.0
             }
             progress_bar.set_postfix(**logs)
             accelerator.log(logs, step=global_step)
