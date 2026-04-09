@@ -22,7 +22,7 @@ from models.sit import SiT_models
 from loss import SILoss
 from utils import load_encoders
 
-from dataset import CustomDataset
+from dataset import CustomDataset, Cifar10Dataset
 from diffusers.models import AutoencoderKL
 # import wandb_utils
 import wandb
@@ -53,6 +53,10 @@ def preprocess_raw_image(x, enc_type):
         x = x / 255.
         x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
     elif 'jepa' in enc_type:
+        x = x / 255.
+        x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
+        x = torch.nn.functional.interpolate(x, 224 * (resolution // 256), mode='bicubic')
+    elif 'meddinov3' in enc_type:
         x = x / 255.
         x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
         x = torch.nn.functional.interpolate(x, 224 * (resolution // 256), mode='bicubic')
@@ -210,7 +214,7 @@ def main(args):
     )    
     
     # Setup data:
-    train_dataset = CustomDataset(args.data_dir)
+    train_dataset = Cifar10Dataset(args.data_dir, split='train')
     local_batch_size = int(args.batch_size // accelerator.num_processes)
     train_dataloader = DataLoader(
         train_dataset,
@@ -271,7 +275,7 @@ def main(args):
     gt_xs = sample_posterior(
         gt_xs.to(device), latents_scale=latents_scale, latents_bias=latents_bias
         )
-    ys = torch.randint(1000, size=(sample_batch_size,), device=device)
+    ys = torch.randint(args.num_classes, size=(sample_batch_size,), device=device)
     ys = ys.to(device)
     # Create sampling noise:
     n = ys.size(0)
@@ -299,8 +303,9 @@ def main(args):
                     for encoder, encoder_type, arch in zip(encoders, encoder_types, architectures):
                         raw_image_ = preprocess_raw_image(raw_image, encoder_type)
                         z = encoder.forward_features(raw_image_)
-                        if 'mocov3' in encoder_type: z = z = z[:, 1:] 
-                        if 'dinov2' in encoder_type: z = z['x_norm_patchtokens']
+                        if 'mocov3' in encoder_type: z = z[:, 1:]
+                        if 'dinov2' in encoder_type or 'meddinov3' in encoder_type:
+                            z = z['x_norm_patchtokens']
                         zs.append(z)
 
             with accelerator.accumulate(model):
@@ -328,7 +333,7 @@ def main(args):
             if global_step % args.checkpointing_steps == 0 and global_step > 0:
                 if accelerator.is_main_process:
                     checkpoint = {
-                        "model": model.module.state_dict(),
+                        "model": accelerator.unwrap_model(model).state_dict(),
                         "ema": ema.state_dict(),
                         "opt": optimizer.state_dict(),
                         "args": args,
@@ -338,7 +343,7 @@ def main(args):
                     torch.save(checkpoint, checkpoint_path)
                     logger.info(f"Saved checkpoint to {checkpoint_path}")
 
-            if (global_step == 1 or (global_step % args.sampling_steps == 0 and global_step > 0)):
+            if (global_step % args.sampling_steps == 0 and global_step > 0):
                 from samplers import euler_sampler
                 with torch.no_grad():
                     samples = euler_sampler(
@@ -346,7 +351,7 @@ def main(args):
                         xT, 
                         ys,
                         num_steps=50, 
-                        cfg_scale=4.0,
+                        cfg_scale=1.0,
                         guidance_low=0.,
                         guidance_high=1.,
                         path_type=args.path_type,

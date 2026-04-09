@@ -13,6 +13,8 @@ try:
 except ImportError:
     pyspng = None
 
+import torchvision.transforms.functional as TF
+
 
 class CustomDataset(Dataset):
     def __init__(self, data_dir):
@@ -73,6 +75,47 @@ class CustomDataset(Dataset):
 
         features = np.load(os.path.join(self.features_dir, feature_fname))
         return torch.from_numpy(image), torch.from_numpy(features), torch.tensor(self.labels[idx])
+
+class Cifar10Dataset(Dataset):
+    """
+    CIFAR-10 dataset that returns (raw_image, vae_moments, label).
+
+    raw_image  : uint8 tensor (3, resolution, resolution)
+    vae_moments: float32 tensor (8, resolution//8, resolution//8) — pre-computed VAE moments
+    label      : int64 scalar
+
+    Pre-compute vae_moments with prepare_cifar10.py before training.
+    Expected layout on disk:
+        <data_dir>/images/<split>/<idx>.png
+        <data_dir>/vae-sd/<split>/<idx>.npy
+        <data_dir>/vae-sd/<split>/dataset.json  ({"labels": [[filename, class_idx], ...]})
+    """
+
+    def __init__(self, data_dir, split='train', resolution=256):
+        self.images_dir = os.path.join(data_dir, 'images', split)
+        self.features_dir = os.path.join(data_dir, 'vae-sd', split)
+        self.resolution = resolution
+
+        with open(os.path.join(self.features_dir, 'dataset.json'), 'r') as f:
+            meta = json.load(f)['labels']  # list of [filename, class_idx]
+
+        self.entries = meta  # [("0.npy", 3), ...]
+
+    def __len__(self):
+        return len(self.entries)
+
+    def __getitem__(self, idx):
+        fname, label = self.entries[idx]
+        base = os.path.splitext(fname)[0]
+
+        img_path = os.path.join(self.images_dir, base + '.png')
+        image = np.array(PIL.Image.open(img_path).convert('RGB'))  # (H, W, 3)
+        image = image.transpose(2, 0, 1)  # (3, H, W)
+        raw_image = torch.from_numpy(image)  # uint8
+
+        features = np.load(os.path.join(self.features_dir, fname))  # (8, h, w)
+        return raw_image, torch.from_numpy(features), torch.tensor(label, dtype=torch.int64)
+
 
 def get_feature_dir_info(root):
     files = glob.glob(os.path.join(root, '*.npy'))

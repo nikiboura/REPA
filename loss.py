@@ -81,6 +81,13 @@ class SILoss:
         proj_loss = 0.
         bsz = zs[0].shape[0]
         for i, (z, z_tilde) in enumerate(zip(zs, zs_tilde)):
+            if z.shape[1] != z_tilde.shape[1]:
+                B, N, D = z.shape
+                H = W = int(N ** 0.5)
+                H2 = W2 = int(z_tilde.shape[1] ** 0.5)
+                z = z.reshape(B, H, W, D).permute(0, 3, 1, 2)
+                z = F.interpolate(z.float(), size=(H2, W2), mode="bilinear", align_corners=False)
+                z = z.permute(0, 2, 3, 1).reshape(B, H2 * W2, D)
             for j, (z_j, z_tilde_j) in enumerate(zip(z, z_tilde)):
                 z_tilde_j = torch.nn.functional.normalize(z_tilde_j, dim=-1) 
                 z_j = torch.nn.functional.normalize(z_j, dim=-1) 
