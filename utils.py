@@ -162,10 +162,13 @@ def load_encoders(enc_type, device, resolution=256):
                 'MEDDINOV3_PATH',
                 _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'MedDINOv3')
             )
-            dinov3_pkg_path = _os.path.join(
-                meddinov3_base,
-                'nnUNet/nnunetv2/training/nnUNetTrainer/dinov3'
-            )
+            # Support both the full MedDINOv3 repo layout and the minimal dataset layout
+            _full_path = _os.path.join(meddinov3_base, 'nnUNet/nnunetv2/training/nnUNetTrainer/dinov3')
+            _minimal_path = _os.path.join(meddinov3_base, 'dinov3_pkg')
+            if _os.path.isdir(_minimal_path):
+                dinov3_pkg_path = _minimal_path
+            else:
+                dinov3_pkg_path = _full_path
             if dinov3_pkg_path not in _sys.path:
                 _sys.path.insert(0, dinov3_pkg_path)
             from dinov3.models.vision_transformer import vit_base as _meddinov3_vit_base
