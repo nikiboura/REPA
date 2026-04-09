@@ -33,7 +33,7 @@ def encode_batch(vae, imgs, device):
     return moments.cpu().numpy().astype(np.float32)
 
 
-def process_split(dataset, out_dir, split, resolution, vae, device, batch_size):
+def process_split(dataset, out_dir, split, resolution, vae, device, batch_size, max_samples=None):
     images_dir = os.path.join(out_dir, 'images', split)
     features_dir = os.path.join(out_dir, 'vae-sd', split)
     os.makedirs(images_dir, exist_ok=True)
@@ -49,7 +49,7 @@ def process_split(dataset, out_dir, split, resolution, vae, device, batch_size):
     )
 
     labels_meta = []
-    n = len(dataset)
+    n = len(dataset) if max_samples is None else min(max_samples, len(dataset))
 
     for start in tqdm(range(0, n, batch_size), desc=f'{split}'):
         end = min(start + batch_size, n)
@@ -84,6 +84,8 @@ def main():
     parser.add_argument('--batch-size', type=int, default=64)
     parser.add_argument('--vae-model', type=str, default='stabilityai/sd-vae-ft-mse')
     parser.add_argument('--cifar-root', type=str, default='./data/cifar10_raw')
+    parser.add_argument('--max-samples', type=int, default=None,
+                        help='Limit number of samples per split (useful for quick tests)')
     args = parser.parse_args()
 
     device = (
@@ -99,7 +101,7 @@ def main():
 
     for split, train_flag in [('train', True), ('val', False)]:
         dataset = CIFAR10(root=args.cifar_root, train=train_flag, download=True, transform=None)
-        process_split(dataset, args.out_dir, split, args.resolution, vae, device, args.batch_size)
+        process_split(dataset, args.out_dir, split, args.resolution, vae, device, args.batch_size, args.max_samples)
 
 
 if __name__ == '__main__':
