@@ -193,7 +193,6 @@ def load_encoders(enc_type, device, resolution=256):
             encoder.embed_dim = 768
             encoder = encoder.to(device)
             encoder.eval()
-            encoder.forward_features = encoder.forward
 
         encoders.append(encoder)
     
