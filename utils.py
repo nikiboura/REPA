@@ -164,7 +164,7 @@ def load_encoders(enc_type, device, resolution=256):
             )
             # Support both the full MedDINOv3 repo layout and the minimal dataset layout
             _full_path = _os.path.join(meddinov3_base, 'nnUNet/nnunetv2/training/nnUNetTrainer/dinov3')
-            _minimal_path = _os.path.join(meddinov3_base, 'dinov3_pkg')
+            _minimal_path = _os.path.join(meddinov3_base, 'dinov3_pkg', 'dinov3')
             if _os.path.isdir(_minimal_path):
                 dinov3_pkg_path = _minimal_path
             else:
