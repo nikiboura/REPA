@@ -347,10 +347,10 @@ def main(args):
                 from samplers import euler_sampler
                 with torch.no_grad():
                     samples = euler_sampler(
-                        model, 
-                        xT, 
+                        model,
+                        xT,
                         ys,
-                        num_steps=50, 
+                        num_steps=50,
                         cfg_scale=1.0,
                         guidance_low=0.,
                         guidance_high=1.,
