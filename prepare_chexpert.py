@@ -25,6 +25,13 @@ from torchvision import transforms
 from tqdm import tqdm
 
 
+def load_vae(vae_type, device):
+    if vae_type == 'medvae':
+        from medvae import MVAE
+        return MVAE(model_name='medvae_8_4_2d', modality='xray').model.to(device).eval()
+    return AutoencoderKL.from_pretrained('stabilityai/sd-vae-ft-mse').to(device).eval()
+
+
 @torch.no_grad()
 def encode_batch(vae, imgs, device):
     imgs = imgs.to(device)
@@ -114,6 +121,7 @@ def main():
     parser.add_argument('--resolution', type=int, default=256)
     parser.add_argument('--batch-size', type=int, default=32)
     parser.add_argument('--vae-model', type=str, default='stabilityai/sd-vae-ft-mse')
+    parser.add_argument('--vae-type', type=str, default='sd', choices=['sd', 'medvae'])
     parser.add_argument('--max-samples', type=int, default=None,
                         help='Max samples per split (None = all)')
     args = parser.parse_args()
@@ -126,8 +134,7 @@ def main():
     print(f'Using device: {device}')
 
     print('Loading VAE...')
-    vae = AutoencoderKL.from_pretrained(args.vae_model).to(device)
-    vae.eval()
+    vae = load_vae(args.vae_type, device)
 
     process_split(
         os.path.join(args.chexpert_root, 'train.csv'),

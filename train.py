@@ -177,15 +177,20 @@ def main(args):
 
     model = model.to(device)
     ema = deepcopy(model).to(device)  # Create an EMA of the model for use after training
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-mse").to(device)
+    if args.vae_type == 'medvae':
+        from medvae import MVAE
+        vae = MVAE(model_name='medvae_8_4_2d', modality='xray').model.to(device).eval()
+        latents_scale = torch.ones(1, 4, 1, 1).to(device)
+        latents_bias  = torch.zeros(1, 4, 1, 1).to(device)
+    else:
+        vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-mse").to(device)
+        latents_scale = torch.tensor(
+            [0.18215, 0.18215, 0.18215, 0.18215]
+            ).view(1, 4, 1, 1).to(device)
+        latents_bias = torch.tensor(
+            [0., 0., 0., 0.]
+            ).view(1, 4, 1, 1).to(device)
     requires_grad(ema, False)
-    
-    latents_scale = torch.tensor(
-        [0.18215, 0.18215, 0.18215, 0.18215]
-        ).view(1, 4, 1, 1).to(device)
-    latents_bias = torch.tensor(
-        [0., 0., 0., 0.]
-        ).view(1, 4, 1, 1).to(device)
 
     # create loss function
     loss_fn = SILoss(
@@ -438,6 +443,7 @@ def parse_args(input_args=None):
     parser.add_argument("--prediction", type=str, default="v", choices=["v"]) # currently we only support v-prediction
     parser.add_argument("--cfg-prob", type=float, default=0.1)
     parser.add_argument("--enc-type", type=str, default='dinov2-vit-b')
+    parser.add_argument("--vae-type", type=str, default='sd', choices=['sd', 'medvae'])
     parser.add_argument("--proj-coeff", type=float, default=0.5)
     parser.add_argument("--weighting", default="uniform", type=str, help="Max gradient norm.")
     parser.add_argument("--legacy", action=argparse.BooleanOptionalAction, default=False)
