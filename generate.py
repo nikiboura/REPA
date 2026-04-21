@@ -85,7 +85,11 @@ def main(args):
             )
     model.load_state_dict(state_dict)
     model.eval()  # important!
-    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
+    if args.vae == 'medvae':
+        from medvae import MVAE
+        vae = MVAE(model_name='medvae_8_4_2d', modality='xray').model.to(device).eval()
+    else:
+        vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
     assert args.cfg_scale >= 1.0, "In almost all cases, cfg_scale be >= 1.0"
     using_cfg = args.cfg_scale > 1.0
 
@@ -141,13 +145,17 @@ def main(args):
             else:
                 raise NotImplementedError()
 
-            latents_scale = torch.tensor(
-                [0.18215, 0.18215, 0.18215, 0.18215, ]
-                ).view(1, 4, 1, 1).to(device)
-            latents_bias = -torch.tensor(
-                [0., 0., 0., 0.,]
-                ).view(1, 4, 1, 1).to(device)
-            samples = vae.decode((samples -  latents_bias) / latents_scale).sample
+            if args.vae == 'medvae':
+                latents_scale = torch.ones(1, 4, 1, 1).to(device)
+                latents_bias  = torch.zeros(1, 4, 1, 1).to(device)
+            else:
+                latents_scale = torch.tensor(
+                    [0.18215, 0.18215, 0.18215, 0.18215, ]
+                    ).view(1, 4, 1, 1).to(device)
+                latents_bias = -torch.tensor(
+                    [0., 0., 0., 0.,]
+                    ).view(1, 4, 1, 1).to(device)
+            samples = vae.decode((samples - latents_bias) / latents_scale).sample
             samples = (samples + 1) / 2.
             samples = torch.clamp(
                 255. * samples, 0, 255
@@ -190,7 +198,7 @@ if __name__ == "__main__":
     parser.add_argument("--qk-norm", action=argparse.BooleanOptionalAction, default=False)
 
     # vae
-    parser.add_argument("--vae",  type=str, choices=["ema", "mse"], default="ema")
+    parser.add_argument("--vae",  type=str, choices=["ema", "mse", "medvae"], default="ema")
 
     # number of samples
     parser.add_argument("--per-proc-batch-size", type=int, default=32)
