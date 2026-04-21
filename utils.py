@@ -194,6 +194,31 @@ def load_encoders(enc_type, device, resolution=256):
             encoder = encoder.to(device)
             encoder.eval()
 
+        elif encoder_type == 'medvae':
+            from medvae import MVAE
+            import torch.nn as _nn
+            # enc_type format: medvae-4-3_2d
+            # → model_name = medvae_4_3_2d, latent_channels = 3
+            _model_name = f'medvae_{architecture}_{model_config}'
+            _lat_ch = int(model_config.split('_')[0])
+            _mvae = MVAE(model_name=_model_name, modality='xray')
+
+            class _MedVAEWrap(_nn.Module):
+                def __init__(self, m, ch):
+                    super().__init__()
+                    self.m = m
+                    self.embed_dim = ch
+                    self.head = _nn.Identity()
+
+                def forward_features(self, x):
+                    in_ch = self.m.model.encoder.conv_in.in_channels
+                    if in_ch == 1:
+                        x = x.mean(dim=1, keepdim=True)
+                    latent = self.m.model.encode(x).latent_dist.mode()  # (B, C, H, W)
+                    return latent.flatten(2).transpose(1, 2)             # (B, H*W, C)
+
+            encoder = _MedVAEWrap(_mvae, _lat_ch).to(device).eval()
+
         encoders.append(encoder)
     
     return encoders, encoder_types, architectures
