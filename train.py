@@ -60,8 +60,6 @@ def preprocess_raw_image(x, enc_type):
         x = x / 255.
         x = Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)(x)
         x = torch.nn.functional.interpolate(x, 224 * (resolution // 256), mode='bicubic')
-    elif 'medvae' in enc_type:
-        x = x / 127.5 - 1.0  # KL-VAE expects [-1, 1]
 
     return x
 
