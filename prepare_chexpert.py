@@ -35,7 +35,9 @@ def load_vae(vae_type, device):
 @torch.no_grad()
 def encode_batch(vae, imgs, device):
     imgs = imgs.to(device)
-    posterior = vae.encode(imgs).latent_dist
+    result = vae.encode(imgs)
+    # SD VAE returns AutoencoderKLOutput(.latent_dist); MedVAE returns DiagonalGaussianDistribution directly
+    posterior = result.latent_dist if hasattr(result, 'latent_dist') else result
     moments = torch.cat([posterior.mean, posterior.std], dim=1)
     return moments.cpu().numpy().astype(np.float32)
 
