@@ -155,7 +155,8 @@ def main(args):
                 latents_bias = -torch.tensor(
                     [0., 0., 0., 0.,]
                     ).view(1, 4, 1, 1).to(device)
-            samples = vae.decode((samples - latents_bias) / latents_scale).sample
+            decoded = vae.decode((samples - latents_bias) / latents_scale)
+            samples = decoded if isinstance(decoded, torch.Tensor) else decoded.sample
             samples = (samples + 1) / 2.
             samples = torch.clamp(
                 255. * samples, 0, 255
