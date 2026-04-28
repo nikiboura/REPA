@@ -176,6 +176,11 @@ def main(args):
     )
 
     model = model.to(device)
+
+    if args.teacher_ckpt is not None:
+        from weight_selection_init import weight_selection_init
+        weight_selection_init(model, args.teacher_ckpt)
+
     ema = deepcopy(model).to(device)  # Create an EMA of the model for use after training
     if args.vae_type == 'medvae':
         from medvae import MVAE
@@ -444,6 +449,8 @@ def parse_args(input_args=None):
     parser.add_argument("--cfg-prob", type=float, default=0.1)
     parser.add_argument("--enc-type", type=str, default='dinov2-vit-b')
     parser.add_argument("--vae-type", type=str, default='sd', choices=['sd', 'medvae'])
+    parser.add_argument("--teacher-ckpt", type=str, default=None,
+                        help="Path to a larger SiT checkpoint for weight-selection initialization")
     parser.add_argument("--proj-coeff", type=float, default=0.5)
     parser.add_argument("--weighting", default="uniform", type=str, help="Max gradient norm.")
     parser.add_argument("--legacy", action=argparse.BooleanOptionalAction, default=False)
