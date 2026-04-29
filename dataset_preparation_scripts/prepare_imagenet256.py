@@ -2,7 +2,7 @@
 prepare_imagenet256.py
 ----------------------
 Reads ImageNet 256×256 images and VAE-encodes them, saving in the layout
-expected by Cifar10Dataset:
+expected.
 
     <out_dir>/images/<split>/<idx>.png        – RGB images
     <out_dir>/vae-sd/<split>/<idx>.npy        – VAE moments (8, h, w) float32
