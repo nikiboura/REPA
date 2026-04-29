@@ -2,7 +2,7 @@
 prepare_chexpert.py
 -------------------
 Reads CheXpert images, resizes to 256×256, VAE-encodes, and saves in
-the layout expected by Cifar10Dataset:
+the layout expected.
 
     <out_dir>/images/<split>/<idx>.png        – resized RGB images
     <out_dir>/vae-sd/<split>/<idx>.npy        – VAE moments (8, h, w) float32
