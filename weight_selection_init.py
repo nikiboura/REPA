@@ -46,6 +46,19 @@ def weight_selection_init(student_model, teacher_ckpt_path):
     ckpt = torch.load(teacher_ckpt_path, map_location='cpu', weights_only=False)
     teacher_sd = ckpt['ema'] if 'ema' in ckpt else ckpt
 
+    # Handle legacy checkpoint format where decoder blocks are stored separately
+    if any(k.startswith('decoder_blocks.') for k in teacher_sd):
+        enc_depth = max(int(k.split('.')[1]) for k in teacher_sd if k.startswith('blocks.')) + 1
+        converted = {}
+        for k, v in teacher_sd.items():
+            if k.startswith('decoder_blocks.'):
+                parts = k.split('.')
+                new_idx = int(parts[1]) + enc_depth
+                converted['blocks.' + str(new_idx) + '.' + '.'.join(parts[2:])] = v
+            else:
+                converted[k] = v
+        teacher_sd = converted
+
     student_sd = student_model.state_dict()
 
     # Determine block count for teacher and student
