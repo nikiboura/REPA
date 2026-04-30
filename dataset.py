@@ -76,7 +76,7 @@ class CustomDataset(Dataset):
         features = np.load(os.path.join(self.features_dir, feature_fname))
         return torch.from_numpy(image), torch.from_numpy(features), torch.tensor(self.labels[idx])
 
-class Cifar10Dataset(Dataset):
+class LatentDataset(Dataset):
     """
     CIFAR-10 dataset that returns (raw_image, vae_moments, label).
 
