@@ -4,9 +4,13 @@ Based on: "Initializing Models with Larger Ones" (arxiv 2311.18823)
 
 Transfers weights from a larger pretrained SiT checkpoint to a smaller SiT model
 by uniformly selecting a subset of weights across every dimension.
+
+Encoder blocks are mapped only to teacher encoder blocks, and decoder blocks
+only to teacher decoder blocks, respecting the functional role of each block.
 """
 
 import torch
+from utils import load_legacy_checkpoints
 
 
 def uniform_element_selection(wt, s_shape):
@@ -28,6 +32,19 @@ def uniform_element_selection(wt, s_shape):
     return ws
 
 
+def _build_block_map(s_enc, s_dec, t_enc, t_dec):
+    """
+    Build a per-block mapping from student index → teacher index.
+
+    Encoder blocks map within [0, t_enc) and decoder blocks map within
+    [t_enc, t_enc+t_dec), keeping the two groups independent.
+    """
+    enc_map = torch.round(torch.linspace(0, t_enc - 1, s_enc)).long().tolist()
+    dec_offsets = torch.round(torch.linspace(0, t_dec - 1, s_dec)).long().tolist()
+    dec_map = [t_enc + o for o in dec_offsets]
+    return enc_map + dec_map
+
+
 def weight_selection_init(student_model, teacher_ckpt_path):
     """
     Initialize student_model weights from a larger teacher checkpoint.
@@ -46,33 +63,33 @@ def weight_selection_init(student_model, teacher_ckpt_path):
     ckpt = torch.load(teacher_ckpt_path, map_location='cpu', weights_only=False)
     teacher_sd = ckpt['ema'] if 'ema' in ckpt else ckpt
 
-    # Handle legacy checkpoint format where decoder blocks are stored separately
+    # Normalize legacy format (decoder_blocks.X → blocks.{enc_depth+X})
     if any(k.startswith('decoder_blocks.') for k in teacher_sd):
-        enc_depth = max(int(k.split('.')[1]) for k in teacher_sd if k.startswith('blocks.')) + 1
-        converted = {}
-        for k, v in teacher_sd.items():
-            if k.startswith('decoder_blocks.'):
-                parts = k.split('.')
-                new_idx = int(parts[1]) + enc_depth
-                converted['blocks.' + str(new_idx) + '.' + '.'.join(parts[2:])] = v
-            else:
-                converted[k] = v
-        teacher_sd = converted
+        t_enc_depth = max(int(k.split('.')[1]) for k in teacher_sd if k.startswith('blocks.')) + 1
+        teacher_sd = load_legacy_checkpoints(teacher_sd, t_enc_depth)
+    else:
+        # Infer teacher encoder depth from the checkpoint's own encoder_depth key if present,
+        # otherwise assume same encoder_depth as student (safe default for same-config teachers)
+        t_enc_depth = teacher_sd.get('encoder_depth', student_model.encoder_depth)
+        if isinstance(t_enc_depth, torch.Tensor):
+            t_enc_depth = int(t_enc_depth)
 
     student_sd = student_model.state_dict()
+    s_enc_depth = student_model.encoder_depth
 
-    # Determine block count for teacher and student
-    t_blocks = max(int(k.split('.')[1]) for k in teacher_sd if k.startswith('blocks.')) + 1
-    s_blocks = max(int(k.split('.')[1]) for k in student_sd if k.startswith('blocks.')) + 1
+    t_total = max(int(k.split('.')[1]) for k in teacher_sd if k.startswith('blocks.')) + 1
+    s_total = max(int(k.split('.')[1]) for k in student_sd if k.startswith('blocks.')) + 1
 
-    # Map each student block index → teacher block index (uniform spacing)
-    block_map = torch.round(torch.linspace(0, t_blocks - 1, s_blocks)).long().tolist()
+    t_dec_depth = t_total - t_enc_depth
+    s_dec_depth = s_total - s_enc_depth
+
+    block_map = _build_block_map(s_enc_depth, s_dec_depth, t_enc_depth, t_dec_depth)
 
     new_sd = {}
     selected, skipped = [], []
 
     for s_key, s_param in student_sd.items():
-        # Remap block index
+        # Remap block index using the role-aware map
         if s_key.startswith('blocks.'):
             parts = s_key.split('.')
             t_block_idx = block_map[int(parts[1])]
@@ -110,8 +127,11 @@ def weight_selection_init(student_model, teacher_ckpt_path):
 
     missing, unexpected = student_model.load_state_dict(new_sd, strict=False)
 
+    enc_map = list(enumerate(block_map[:s_enc_depth]))
+    dec_map = list(enumerate(block_map[s_enc_depth:], start=s_enc_depth))
     print(f'Weight selection: {len(selected)} layers initialized from teacher')
     print(f'Skipped (kept default init): {len(skipped)} layers')
-    print(f'Block mapping (student→teacher): {list(enumerate(block_map))}')
+    print(f'Encoder block mapping (student→teacher): {enc_map}')
+    print(f'Decoder block mapping (student→teacher): {dec_map}')
 
     return selected, skipped
