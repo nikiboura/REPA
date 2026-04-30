@@ -22,7 +22,7 @@ from models.sit import SiT_models
 from loss import SILoss
 from utils import load_encoders
 
-from dataset import CustomDataset, Cifar10Dataset
+from dataset import CustomDataset, LatentDataset
 from diffusers.models import AutoencoderKL
 # import wandb_utils
 import wandb
@@ -224,7 +224,7 @@ def main(args):
     )    
     
     # Setup data:
-    train_dataset = Cifar10Dataset(args.data_dir, split='train')
+    train_dataset = LatentDataset(args.data_dir, split='train')
     local_batch_size = int(args.batch_size // accelerator.num_processes)
     train_dataloader = DataLoader(
         train_dataset,
