@@ -79,6 +79,8 @@ class SILoss:
 
         # projection loss
         proj_loss = 0.
+        if len(zs) == 0:
+            return denoising_loss, torch.tensor(0., device=denoising_loss.device)
         bsz = zs[0].shape[0]
         for i, (z, z_tilde) in enumerate(zip(zs, zs_tilde)):
             if z.shape[1] != z_tilde.shape[1]:
