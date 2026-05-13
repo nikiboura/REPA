@@ -83,7 +83,9 @@ def main(args):
         state_dict = load_legacy_checkpoints(
             state_dict=state_dict, encoder_depth=args.encoder_depth
             )
-    model.load_state_dict(state_dict)
+    missing, unexpected = model.load_state_dict(state_dict, strict=False)
+    if missing:
+        print(f"Missing keys (will use random init, e.g. projectors not in EMA): {missing}")
     model.eval()  # important!
     if args.vae == 'medvae':
         from medvae import MVAE
