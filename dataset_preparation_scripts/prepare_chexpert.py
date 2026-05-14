@@ -4,12 +4,19 @@ prepare_chexpert.py
 Reads Chexpert images, resizes to 256×256, VAE-encodes, and saves in
 the layout expected.
 
+Output:
     <out_dir>/images/<split>/<idx>.png        – resized RGB images
     <out_dir>/vae-sd/<split>/<idx>.npy        – VAE moments (8, h, w) float32
     <out_dir>/vae-sd/<split>/dataset.json     – {"labels": [["<idx>.npy", cls],...]}
 
 Usage:
-
+    python scripts/prepare.py \
+        --data-root /content/chexpert \              # raw dataset saved here
+        --out-dir   /content/data/chexpert_256 \     # processed dataset saved here
+        --vae-type  sd                               # sd or medvae  
+        --max-samples 80000 \                        # samples used
+        --resolution  256 \                          # desirable resolution
+        --kaggle-json ~/.kaggle/kaggle.json          # path to kaggle.json for download
 
 
 Binary label: 0 = normal ("No Finding" == 1.0), 1 = abnormal

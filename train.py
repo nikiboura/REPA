@@ -412,7 +412,8 @@ def parse_args(input_args=None):
     # model
     parser.add_argument("--model", type=str)
     parser.add_argument("--num-classes", type=int, default=1000)
-    parser.add_argument("--encoder-depth", type=int, default=8)
+    parser.add_argument("--encoder-depth", type=int, default=None,
+                        help="REPA alignment layer. Auto-computed as 28%% of model depth if not set.")
     parser.add_argument("--fused-attn", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--qk-norm",  action=argparse.BooleanOptionalAction, default=False)
 
@@ -459,7 +460,14 @@ def parse_args(input_args=None):
         args = parser.parse_args(input_args)
     else:
         args = parser.parse_args()
-        
+
+    if args.encoder_depth is None:
+        MODEL_DEPTHS = {"SiT-XL": 28, "SiT-L": 24, "SiT-B": 12, "SiT-S": 12}
+        family = args.model.split("/")[0]
+        total = MODEL_DEPTHS.get(family, 12)
+        args.encoder_depth = max(1, round(total * 0.28))
+        print(f"encoder-depth auto-computed: {args.encoder_depth}/{total} (28% of model depth)")
+
     return args
 
 if __name__ == "__main__":
