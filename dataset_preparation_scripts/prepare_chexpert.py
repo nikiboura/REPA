@@ -1,12 +1,16 @@
 """
 prepare_chexpert.py
 -------------------
-Reads CheXpert images, resizes to 256×256, VAE-encodes, and saves in
+Reads Chexpert images, resizes to 256×256, VAE-encodes, and saves in
 the layout expected.
 
     <out_dir>/images/<split>/<idx>.png        – resized RGB images
     <out_dir>/vae-sd/<split>/<idx>.npy        – VAE moments (8, h, w) float32
-    <out_dir>/vae-sd/<split>/dataset.json     – {"labels": [["<idx>.npy", cls], ...]}
+    <out_dir>/vae-sd/<split>/dataset.json     – {"labels": [["<idx>.npy", cls],...]}
+
+Usage:
+
+
 
 Binary label: 0 = normal ("No Finding" == 1.0), 1 = abnormal
 Only frontal views are kept.
@@ -128,7 +132,7 @@ def download_chexpert(chexpert_root, kaggle_json=None):
         shutil.copy(kaggle_json, dest)
         os.chmod(dest, 0o600)
     os.makedirs(chexpert_root, exist_ok=True)
-    print('Downloading CheXpert from Kaggle...')
+    print('Downloading CheXpert from Kaggle')
     subprocess.run(
         ['kaggle', 'datasets', 'download', 'ashery/chexpert',
          '-p', chexpert_root, '--unzip'],
@@ -143,7 +147,7 @@ def main():
     parser.add_argument('--chexpert-root', type=str, required=True,
                         help='Path to CheXpert-v1.0-small/ (contains train.csv, valid.csv, train/, valid/)')
     parser.add_argument('--kaggle-json', type=str, default=None,
-                        help='Path to kaggle.json (optional if already at ~/.kaggle/kaggle.json)')
+                        help='Path to kaggle.json)')
     parser.add_argument('--resolution', type=int, default=256)
     parser.add_argument('--batch-size', type=int, default=32)
     parser.add_argument('--vae-model', type=str, default='stabilityai/sd-vae-ft-mse')
