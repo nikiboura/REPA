@@ -15,6 +15,8 @@ Only frontal views are kept.
 import argparse
 import json
 import os
+import shutil
+import subprocess
 
 import numpy as np
 import pandas as pd
@@ -115,11 +117,33 @@ def process_split(csv_path, chexpert_root, out_dir, split, resolution,
     print(f'[{split}] saved {len(labels_meta)} images and VAE latents to {out_dir}')
 
 
+def download_chexpert(chexpert_root, kaggle_json=None):
+    if os.path.isfile(os.path.join(chexpert_root, 'train.csv')):
+        print('CheXpert already downloaded, skipping.')
+        return
+    if kaggle_json and os.path.isfile(kaggle_json):
+        kaggle_dir = os.path.expanduser('~/.kaggle')
+        os.makedirs(kaggle_dir, exist_ok=True)
+        dest = os.path.join(kaggle_dir, 'kaggle.json')
+        shutil.copy(kaggle_json, dest)
+        os.chmod(dest, 0o600)
+    os.makedirs(chexpert_root, exist_ok=True)
+    print('Downloading CheXpert from Kaggle...')
+    subprocess.run(
+        ['kaggle', 'datasets', 'download', 'ashery/chexpert',
+         '-p', chexpert_root, '--unzip'],
+        check=True,
+    )
+    print('Download complete.')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out-dir', type=str, default='./data/chexpert_256')
     parser.add_argument('--chexpert-root', type=str, required=True,
                         help='Path to CheXpert-v1.0-small/ (contains train.csv, valid.csv, train/, valid/)')
+    parser.add_argument('--kaggle-json', type=str, default=None,
+                        help='Path to kaggle.json (optional if already at ~/.kaggle/kaggle.json)')
     parser.add_argument('--resolution', type=int, default=256)
     parser.add_argument('--batch-size', type=int, default=32)
     parser.add_argument('--vae-model', type=str, default='stabilityai/sd-vae-ft-mse')
@@ -127,6 +151,8 @@ def main():
     parser.add_argument('--max-samples', type=int, default=None,
                         help='Max samples per split (None = all)')
     args = parser.parse_args()
+
+    download_chexpert(args.chexpert_root, args.kaggle_json)
 
     device = (
         'cuda' if torch.cuda.is_available()

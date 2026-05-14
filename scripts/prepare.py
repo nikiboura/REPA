@@ -1,11 +1,11 @@
 """
-prepare.py  —  Download CheXpert and encode VAE latents.
+prepare.py  —  Download CheXpert and encode VAE latents using either sd or medvae.
 
 Usage:
     python scripts/prepare.py \
-        --data-root /data/chexpert \
-        --out-dir   /data/chexpert_256 \
-        --vae-type  sd              # sd | medvae | both (default: both)
+        --data-root /data/chexpert \         # raw dataset saved here
+        --out-dir   /data/chexpert_256 \     # processed dataset saved here
+        --vae-type  sd                       # sd | medvae | both 
         --max-samples 80000 \
         --resolution  256 \
         --kaggle-json ~/.kaggle/kaggle.json
@@ -30,7 +30,7 @@ PREP_SCRIPT = os.path.join(REPA_DIR, "dataset_preparation_scripts", "prepare_che
 
 def download_chexpert(data_root, kaggle_json):
     if os.path.isfile(os.path.join(data_root, "train.csv")):
-        print("CheXpert already downloaded, skipping.")
+        print("CheXpert already downloaded.")
         return
 
     if kaggle_json and os.path.isfile(kaggle_json):
@@ -40,7 +40,7 @@ def download_chexpert(data_root, kaggle_json):
         shutil.copy(kaggle_json, dest)
         os.chmod(dest, 0o600)
 
-    print("Downloading CheXpert from Kaggle...")
+    print("Downloading CheXpert from Kaggle")
     subprocess.run(
         ["kaggle", "datasets", "download", "ashery/chexpert",
          "-p", data_root, "--unzip"],
