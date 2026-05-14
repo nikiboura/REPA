@@ -158,10 +158,26 @@ def load_encoders(enc_type, device, resolution=256):
         elif encoder_type == 'meddinov3':
             import sys as _sys
             import os as _os
+            import subprocess as _sp
             meddinov3_base = _os.environ.get(
                 'MEDDINOV3_PATH',
                 _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'MedDINOv3')
             )
+            if not _os.path.isdir(_os.path.join(meddinov3_base, 'dinov3_pkg')):
+                print('MedDINOv3 not found, downloading from Kaggle...')
+                _os.makedirs(meddinov3_base, exist_ok=True)
+                _sp.run(
+                    ['kaggle', 'datasets', 'download', 'nikiboura/meddinov3-minimal',
+                     '-p', meddinov3_base, '--unzip'],
+                    check=True,
+                )
+                _sub = _os.path.join(meddinov3_base, 'meddinov3_minimal')
+                if _os.path.isdir(_sub):
+                    import shutil as _shutil
+                    for _item in _os.listdir(_sub):
+                        _shutil.move(_os.path.join(_sub, _item), meddinov3_base)
+                    _os.rmdir(_sub)
+                print('MedDINOv3 downloaded.')
             # Support both the full MedDINOv3 repo layout and the minimal dataset layout
             _full_path = _os.path.join(meddinov3_base, 'nnUNet/nnunetv2/training/nnUNetTrainer/dinov3')
             _minimal_path = _os.path.join(meddinov3_base, 'dinov3_pkg', 'dinov3')
