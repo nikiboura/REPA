@@ -1,5 +1,11 @@
 REPA with CheXpert — Run Guide
 
+AUTOMATIONS
+-----------
+ - Meddinov3 is automatically downloaded when training is running in train.py (from utils.py).
+ - Chexpert is automatically downloaded when prepare_chexpert.py is running. 
+ - Encoder depth is auto-calculated as the 28% of the total depth of the model so it doesn't need to be specified as an argument.
+
 SETUP
 -----
 1. Clone the repo
@@ -10,7 +16,9 @@ SETUP
    conda create -n repa python=3.9 -y
    conda activate repa
    pip install -r requirements.txt
-   pip install kaggle medvae pandas
+   pip install kaggle pandas
+   pip install medvae (or pip install medvae --no-deps
+		          pip install scipy scikit-image SimpleITK omegaconf monai)
 
 
 3. Create Kaggle token & note the path
