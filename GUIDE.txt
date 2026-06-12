@@ -12,16 +12,14 @@ SETUP
    git clone https://github.com/nikiboura/REPA.git
    cd REPA
 
-2. Set up environment 
+2. Set up environment
    conda create -n repa python=3.9 -y
    conda activate repa
    pip install -r requirements.txt
-   pip install kaggle pandas clean-fid
-   pip install "scipy>=1.13" medvae
 
    (if medvae has dependency conflicts, use:
-   	pip install medvae --no-deps
-        pip install "scipy>=1.13" scikit-image SimpleITK omegaconf monai)
+       pip install medvae --no-deps
+       pip install "scipy>=1.13" scikit-image SimpleITK omegaconf monai)
 
 3. Create Kaggle token & note the path
    https://www.kaggle.com/settings/api
