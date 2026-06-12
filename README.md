@@ -77,7 +77,7 @@ convergence.
 Run generation for all three experiments:
   
 ```bash
-# Ablation: SiT-S/4, 400k checkpoint, 5k samples
+# Ablation: SiT-S/4, 400k checkpoint, 50k samples
 bash generate.sh
 ```
 
