@@ -41,8 +41,8 @@ The link was retrieved from utils.py
   bash prepare_data.sh
   ```
 
-  # full dataset
   ```bash
+  # full dataset
   bash prepare_data.sh -1
   ```
 
@@ -81,8 +81,8 @@ Run generation for all three experiments:
 bash generate.sh
 ```
 
-# Full: SiT-B/2, 4M checkpoint, 50k samples
 ```bash
+# Full: SiT-B/2, 4M checkpoint, 50k samples
 bash generate.sh -1
 ```
 
