@@ -55,7 +55,7 @@ python train.py \
   --teacher-ckpt $TEACHER_CKPT \
   --report-to none
 
-# C — MedVAE + REPA (MedDINOv3 downloads automatically)
+# C — MedVAE + REPA 
 python train.py \
   --exp-name sit-chexpert-medvae-repa \
   --output-dir $OUTPUT_DIR \
