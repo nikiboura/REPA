@@ -6,7 +6,7 @@ KAGGLE_JSON="/path/to/kaggle.json"
 if [ "$1" == "-1" ]; then
     MAX_SAMPLES_ARG=""
 elif [ "$1" == "-s" ]; then
-    MAX_SAMPLES_ARG="--max-samples 10"
+    MAX_SAMPLES_ARG="--max-samples 33"
 else
     MAX_SAMPLES_ARG="--max-samples $MAX_SAMPLES"
 fi
