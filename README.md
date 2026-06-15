@@ -46,11 +46,10 @@ The link was retrieved from utils.py
   bash prepare_data.sh -1
   ```
 
-  This will create two preprocessed directories:
-  - ./data/chexpert_256_sdvae — encoded with the standard Stable Diffusion VAE
-  (Experiment A)
-
-  - ./data/chexpert_256_medvae — encoded with MedVAE (Experiments B & C)
+  This will create the following  directories:
+  - ./data/chexpert/ includes raw CheXpert images downloaded from Kaggle
+  - ./data/chexpert_256_sdvae/  preprocessed with SD VAE (Experiment A)
+  - ./data/chexpert_256_medvae/  preprocessed with MedVAE (Experiments B & C)
 
 ### 3. Training
 Set your `TEACHER_CKPT` path in `train.sh`, then run:
@@ -67,11 +66,9 @@ bash train.sh -1
 This runs all three experiments sequentially:
   - A — SiT + SD VAE (no REPA)
   - B — SiT + MedVAE (no REPA)
-  - C — SiT + MedVAE + REPA alignment (MedDINOv3 downloads automatically)
+  - C — SiT + MedVAE + REPA alignment
   
-The teacher checkpoint (last.pt) is the pretrained SiT-XL/2 model (4M iterations)
-from the original REPA repo, used to initialize student weights for faster
-convergence. 
+
  
 ### 4. Evaluation
 Run generation for all three experiments:
@@ -85,5 +82,4 @@ bash generate.sh
 # Full: SiT-B/2, 4M checkpoint, 50k samples
 bash generate.sh -1
 ```
-
 Generated samples are saved as .png files and a .npz file under ./results/<exp-name>/samples/.
