@@ -38,12 +38,13 @@ The link was retrieved from utils.py
 
   ```bash
   # 80k samples
-  bash prepare_data.sh
-  ```
+  bash "bash files/prepare_data.sh"
 
-  ```bash
   # full dataset
-  bash prepare_data.sh -1
+  bash "bash files/prepare_data.sh" -1
+
+  # sanity check (10 images)
+  bash "bash files/prepare_data.sh" -s
   ```
 
   This will create the following  directories:
@@ -56,13 +57,14 @@ Set your `TEACHER_CKPT` path in `train.sh`, then run:
   
 ```bash
 # Ablation: SiT-S/4, 400k steps
-bash train.sh
-```
+bash "bash files/train.sh"
 
-```bash
 # Full training: SiT-B/2, 4M steps
-bash train.sh -1
- ```
+bash "bash files/train.sh" -1
+
+# Sanity check (2 steps)
+bash "bash files/train.sh" -s
+```
 This runs all three experiments sequentially:
   - A — SiT + SD VAE (no REPA)
   - B — SiT + MedVAE (no REPA)
@@ -75,11 +77,12 @@ Run generation for all three experiments:
   
 ```bash
 # Ablation: SiT-S/4, 400k checkpoint, 50k samples
-bash generate.sh
-```
+bash "bash files/generate.sh"
 
-```bash
 # Full: SiT-B/2, 4M checkpoint, 50k samples
-bash generate.sh -1
+bash "bash files/generate.sh" -1
+
+# Sanity check (4 samples)
+bash "bash files/generate.sh" -s
 ```
 Generated samples are saved as .png files and a .npz file under ./results/<exp-name>/samples/.

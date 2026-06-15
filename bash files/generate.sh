@@ -5,9 +5,15 @@ OUTPUT_DIR="./results"
 if [ "$1" == "-1" ]; then
     MODEL="SiT-B/2"
     CKPT_STEP="4000000"
+    NUM_SAMPLES=50000
+elif [ "$1" == "-s" ]; then
+    MODEL="SiT-S/4"
+    CKPT_STEP="0000002"
+    NUM_SAMPLES=4
 else
     MODEL="SiT-S/4"
     CKPT_STEP="0400000"
+    NUM_SAMPLES=50000
 fi
 
 # A — SD VAE
@@ -16,7 +22,7 @@ torchrun --nproc_per_node=1 generate.py \
   --ckpt $OUTPUT_DIR/sit-chexpert-sdvae/checkpoints/${CKPT_STEP}.pt \
   --sample-dir $OUTPUT_DIR/sit-chexpert-sdvae/samples \
   --num-classes 2 \
-  --num-fid-samples 50000 \
+  --num-fid-samples $NUM_SAMPLES \
   --path-type linear \
   --mode ode \
   --num-steps 50 \
@@ -30,7 +36,7 @@ torchrun --nproc_per_node=1 generate.py \
   --ckpt $OUTPUT_DIR/sit-chexpert-medvae/checkpoints/${CKPT_STEP}.pt \
   --sample-dir $OUTPUT_DIR/sit-chexpert-medvae/samples \
   --num-classes 2 \
-  --num-fid-samples 50000 \
+  --num-fid-samples $NUM_SAMPLES \
   --path-type linear \
   --mode ode \
   --num-steps 50 \
@@ -44,7 +50,7 @@ torchrun --nproc_per_node=1 generate.py \
   --ckpt $OUTPUT_DIR/sit-chexpert-medvae-repa/checkpoints/${CKPT_STEP}.pt \
   --sample-dir $OUTPUT_DIR/sit-chexpert-medvae-repa/samples \
   --num-classes 2 \
-  --num-fid-samples 50000 \
+  --num-fid-samples $NUM_SAMPLES \
   --path-type linear \
   --mode ode \
   --num-steps 50 \
