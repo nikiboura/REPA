@@ -15,7 +15,7 @@ cd REPA
 ```bash
 conda create -n repa python=3.9 -y
 conda activate repa
-bash install.sh
+bash bash_files/install.sh
 ```
 
 ### 3. Kaggle Token
@@ -38,13 +38,13 @@ The link was retrieved from utils.py
 
   ```bash
   # 80k samples
-  bash "bash files/prepare_data.sh"
+  bash "bash_files/prepare_data.sh"
 
   # full dataset
-  bash "bash files/prepare_data.sh" -1
+  bash "bash_files/prepare_data.sh" -1
 
   # sanity check (10 images)
-  bash "bash files/prepare_data.sh" -s
+  bash "bash_files/prepare_data.sh" -s
   ```
 
   This will create the following  directories:
@@ -57,13 +57,13 @@ Set your `TEACHER_CKPT` path in `train.sh`, then run:
   
 ```bash
 # Ablation: SiT-S/4, 400k steps
-bash "bash files/train.sh"
+bash "bash_files/train.sh"
 
 # Full training: SiT-B/2, 4M steps
-bash "bash files/train.sh" -1
+bash "bash_files/train.sh" -1
 
 # Sanity check (2 steps)
-bash "bash files/train.sh" -s
+bash "bash_files/train.sh" -s
 ```
 This runs all three experiments sequentially:
   - A — SiT + SD VAE (no REPA)
@@ -77,12 +77,12 @@ Run generation for all three experiments:
   
 ```bash
 # Ablation: SiT-S/4, 400k checkpoint, 50k samples
-bash "bash files/generate.sh"
+bash "bash_files/generate.sh"
 
 # Full: SiT-B/2, 4M checkpoint, 50k samples
-bash "bash files/generate.sh" -1
+bash "bash_files/generate.sh" -1
 
 # Sanity check (4 samples)
-bash "bash files/generate.sh" -s
+bash "bash_files/generate.sh" -s
 ```
 Generated samples are saved as .png files and a .npz file under ./results/<exp-name>/samples/.
