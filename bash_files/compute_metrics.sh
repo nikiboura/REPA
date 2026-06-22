@@ -1,5 +1,7 @@
 #!/bin/bash
 
+pip install -q torch-fidelity
+
 RESULTS_DIR="./results"
 DATA_DIR="./data"
 

@@ -86,3 +86,12 @@ bash "bash_files/generate.sh" -1
 bash "bash_files/generate.sh" -s
 ```
 Generated samples are saved as .png files and a .npz file under ./results/<exp-name>/samples/.
+
+### 5. Metrics
+Compute FID (torch-fidelity), Clean-FID and KID for all three experiments:
+
+```bash
+bash bash_files/compute_metrics.sh
+```
+
+Make sure reference images exist at `./data/chexpert_256_sdvae/images/train/` before running — these are created automatically by `bash bash_files/prepare_data.sh`.
