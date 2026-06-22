@@ -69,6 +69,7 @@ This runs all three experiments sequentially:
   - A — SiT + SD VAE (no REPA)
   - B — SiT + MedVAE (no REPA)
   - C — SiT + MedVAE + REPA alignment
+  - D — SiT + SD VAE + REPA alignment (see `bash bash_files/experiment_d.sh`)
   
 
  
@@ -102,7 +103,7 @@ bash bash_files/experiment_d.sh -s
 ```
 
 ### 6. Metrics
-Compute FID (torch-fidelity), Clean-FID and KID for all three experiments:
+Compute FID (torch-fidelity), Clean-FID and KID for all four experiments (A, B, C, D):
 
 ```bash
 bash bash_files/compute_metrics.sh

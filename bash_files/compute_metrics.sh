@@ -8,6 +8,7 @@ DATA_DIR="./data"
 SAMPLES_A=$(ls -d $RESULTS_DIR/sit-chexpert-sdvae/samples/*/ 2>/dev/null | sort | tail -1)
 SAMPLES_B=$(ls -d $RESULTS_DIR/sit-chexpert-medvae/samples/*/ 2>/dev/null | sort | tail -1)
 SAMPLES_C=$(ls -d $RESULTS_DIR/sit-chexpert-medvae-repa/samples/*/ 2>/dev/null | sort | tail -1)
+SAMPLES_D=$(ls -d $RESULTS_DIR/sit-chexpert-sdvae-repa/samples/*/ 2>/dev/null | sort | tail -1)
 
 REF=$DATA_DIR/chexpert_256_sdvae/images/train
 
@@ -28,6 +29,11 @@ fidelity --gpu 0 --fid --samples-find-deep \
   --input1 "$SAMPLES_C" \
   --input2 $REF
 
+echo "[D] SD VAE + REPA"
+fidelity --gpu 0 --fid --samples-find-deep \
+  --input1 "$SAMPLES_D" \
+  --input2 $REF
+
 echo ""
 echo "=== Clean-FID & KID ==="
 
@@ -43,9 +49,10 @@ else:
     fid.make_custom_stats(name="chexpert_train", fdir="$REF", mode="clean", batch_size=64, device=device)
 
 samples = {
-    "SD VAE":        "$SAMPLES_A",
-    "MedVAE":        "$SAMPLES_B",
-    "MedVAE + REPA": "$SAMPLES_C",
+    "SD VAE":         "$SAMPLES_A",
+    "MedVAE":         "$SAMPLES_B",
+    "MedVAE + REPA":  "$SAMPLES_C",
+    "SD VAE + REPA":  "$SAMPLES_D",
 }
 
 print(f"\n{'Model':<30} {'Clean-FID':>10} {'KID':>12}")
