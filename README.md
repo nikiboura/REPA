@@ -87,7 +87,21 @@ bash "bash_files/generate.sh" -s
 ```
 Generated samples are saved as .png files and a .npz file under ./results/<exp-name>/samples/.
 
-### 5. Metrics
+### 5. Experiment D — SD VAE + REPA
+Set your `TEACHER_CKPT` path in `experiment_d.sh`, then run:
+
+```bash
+# Ablation: SiT-S/4, 400k steps
+bash bash_files/experiment_d.sh
+
+# Full: SiT-B/2, 4M steps
+bash bash_files/experiment_d.sh -1
+
+# Sanity check
+bash bash_files/experiment_d.sh -s
+```
+
+### 6. Metrics
 Compute FID (torch-fidelity), Clean-FID and KID for all three experiments:
 
 ```bash
