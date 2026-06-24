@@ -58,3 +58,18 @@ torchrun --nproc_per_node=1 generate.py \
   --resolution 256 \
   --vae medvae \
   --projector-embed-dims 768
+
+# D — SD VAE + REPA
+torchrun --nproc_per_node=1 generate.py \
+  --model $MODEL \
+  --ckpt $OUTPUT_DIR/sit-chexpert-sdvae-repa/checkpoints/${CKPT_STEP}.pt \
+  --sample-dir $OUTPUT_DIR/sit-chexpert-sdvae-repa/samples \
+  --num-classes 2 \
+  --num-fid-samples $NUM_SAMPLES \
+  --path-type linear \
+  --mode ode \
+  --num-steps 50 \
+  --cfg-scale 1.5 \
+  --resolution 256 \
+  --projector-embed-dims 768 \
+  --vae mse

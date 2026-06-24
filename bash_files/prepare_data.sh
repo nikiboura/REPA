@@ -11,7 +11,7 @@ else
     MAX_SAMPLES_ARG="--max-samples $MAX_SAMPLES"
 fi
 
-# Experiment A (SD VAE)
+# Experiment A & D (SD VAE)
 python dataset_preparation_scripts/prepare_chexpert.py \
   --chexpert-root ./data/chexpert \
   --out-dir ./data/chexpert_256_sdvae \
