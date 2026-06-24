@@ -49,7 +49,7 @@ The link was retrieved from utils.py
 
   This will create the following  directories:
   - ./data/chexpert/ includes raw CheXpert images downloaded from Kaggle
-  - ./data/chexpert_256_sdvae/  preprocessed with SD VAE (Experiment A)
+  - ./data/chexpert_256_sdvae/  preprocessed with SD VAE (Experiment A & D)
   - ./data/chexpert_256_medvae/  preprocessed with MedVAE (Experiments B & C)
 
 ### 3. Training
@@ -69,12 +69,10 @@ This runs all three experiments sequentially:
   - A — SiT + SD VAE (no REPA)
   - B — SiT + MedVAE (no REPA)
   - C — SiT + MedVAE + REPA alignment
-  - D — SiT + SD VAE + REPA alignment (see `bash bash_files/experiment_d.sh`)
+  - D — SiT + SD VAE + REPA alignment 
   
-
- 
 ### 4. Evaluation
-Run generation for all three experiments:
+Run generation for all four experiments:
   
 ```bash
 # Ablation: SiT-S/4, 400k checkpoint, 50k samples
@@ -88,21 +86,7 @@ bash "bash_files/generate.sh" -s
 ```
 Generated samples are saved as .png files and a .npz file under ./results/<exp-name>/samples/.
 
-### 5. Experiment D — SD VAE + REPA
-Set your `TEACHER_CKPT` path in `experiment_d.sh`, then run:
-
-```bash
-# Ablation: SiT-S/4, 400k steps
-bash bash_files/experiment_d.sh
-
-# Full: SiT-B/2, 4M steps
-bash bash_files/experiment_d.sh -1
-
-# Sanity check
-bash bash_files/experiment_d.sh -s
-```
-
-### 6. Metrics
+### 5. Metrics
 Compute FID (torch-fidelity), Clean-FID and KID for all four experiments (A, B, C, D):
 
 ```bash
