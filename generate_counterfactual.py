@@ -97,8 +97,10 @@ def main(args):
         for i, sample in enumerate(samples):
             original_label = labels[i].item()
             cf_label = y_cf[i].item()
-            fname = f'{total + i:06d}_from{original_label}_to{cf_label}.png'
-            Image.fromarray(sample).save(os.path.join(args.output_dir, fname))
+            base = f'{total + i:06d}_from{original_label}_to{cf_label}'
+            Image.fromarray(sample).save(os.path.join(args.output_dir, f'{base}_counterfactual.png'))
+            real = raw_images[i].permute(1, 2, 0).numpy()
+            Image.fromarray(real).save(os.path.join(args.output_dir, f'{base}_real.png'))
 
         total += len(samples)
         print(f'Generated {total} counterfactuals')
