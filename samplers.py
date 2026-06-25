@@ -53,12 +53,13 @@ def euler_sampler(
         guidance_low=0.0,
         guidance_high=1.0,
         path_type="linear", # not used, just for compatability
+        t0=1.0,
         ):
     # setup conditioning
     if cfg_scale > 1.0:
         y_null = torch.tensor([model.num_classes] * y.size(0), device=y.device)
     _dtype = latents.dtype
-    t_steps = torch.linspace(1, 0, num_steps+1, dtype=torch.float64)
+    t_steps = torch.linspace(t0, 0, num_steps+1, dtype=torch.float64)
     x_next = latents.to(torch.float64)
     device = x_next.device
 
