@@ -30,12 +30,14 @@ def main(args):
     # load model
     latent_size = args.resolution // 8
     z_dims = [int(z) for z in args.projector_embed_dims.split(',') if z] if args.projector_embed_dims else []
+    block_kwargs = {"fused_attn": args.fused_attn, "qk_norm": args.qk_norm}
     model = SiT_models[args.model](
         input_size=latent_size,
         num_classes=args.num_classes,
         use_cfg=(args.cfg_scale > 1.0),
         z_dims=z_dims,
         encoder_depth=args.encoder_depth,
+        **block_kwargs,
     ).to(device)
 
     state_dict = torch.load(args.ckpt, map_location=device, weights_only=False)['ema']
@@ -121,6 +123,8 @@ if __name__ == '__main__':
     parser.add_argument('--vae', type=str, default='mse', choices=['ema', 'mse', 'medvae'])
     parser.add_argument('--projector-embed-dims', type=str, default='')
     parser.add_argument('--encoder-depth', type=int, default=None)
+    parser.add_argument('--fused-attn', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument('--qk-norm', action=argparse.BooleanOptionalAction, default=False)
 
     parser.add_argument('--t0', type=float, default=0.5)
     parser.add_argument('--num-steps', type=int, default=50)
