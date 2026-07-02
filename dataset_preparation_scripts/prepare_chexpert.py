@@ -10,16 +10,19 @@ Output:
     <out_dir>/vae-sd/<split>/dataset.json     – {"labels": [["<idx>.npy", cls],...]}
 
 Usage:
-    python scripts/prepare.py \
-        --data-root /content/chexpert \              # raw dataset saved here
-        --out-dir   /content/data/chexpert_256 \     # processed dataset saved here
-        --vae-type  sd                               # sd or medvae  
-        --max-samples 80000 \                        # samples used
-        --resolution  256 \                          # desirable resolution
-        --kaggle-json ~/.kaggle/kaggle.json          # path to kaggle.json for download
+    python prepare_chexpert.py \
+        --chexpert-root /content/chexpert \
+        --out-dir       /content/data/chexpert_256 \
+        --vae-type      sd \
+        --pathologies   "Pleural Effusion" "Cardiomegaly" \
+        --resolution    256
 
+Labels:
+    0           = healthy  (No Finding == 1.0)
+    1 .. N      = each pathology passed via --pathologies, in order
 
-Binary label: 0 = normal ("No Finding" == 1.0), 1 = abnormal
+Only rows where exactly ONE target pathology is positive (== 1.0) and no
+other disease column is positive are kept (Support Devices is ignored).
 Only frontal views are kept.
 """
 
@@ -37,6 +40,16 @@ from PIL import Image
 from torchvision import transforms
 from tqdm import tqdm
 
+# Columns that are never treated as co-diseases
+NON_DISEASE_COLS = {'No Finding', 'Support Devices'}
+
+ALL_DISEASE_COLS = [
+    'Enlarged Cardiomediastinum', 'Cardiomegaly', 'Lung Opacity',
+    'Lung Lesion', 'Edema', 'Consolidation', 'Pneumonia', 'Atelectasis',
+    'Pneumothorax', 'Pleural Effusion', 'Pleural Other', 'Fracture',
+    'No Finding',
+]
+
 
 def load_vae(vae_type, device):
     if vae_type == 'medvae':
@@ -49,14 +62,31 @@ def load_vae(vae_type, device):
 def encode_batch(vae, imgs, device):
     imgs = imgs.to(device)
     result = vae.encode(imgs)
-    # SD VAE returns AutoencoderKLOutput(.latent_dist); MedVAE returns DiagonalGaussianDistribution directly
     posterior = result.latent_dist if hasattr(result, 'latent_dist') else result
     moments = torch.cat([posterior.mean, posterior.std], dim=1)
     return moments.cpu().numpy().astype(np.float32)
 
 
+def _get_label(row, pathologies, co_disease_cols_per_pathology):
+    """
+    Returns integer label or None (skip).
+      0        = healthy (No Finding == 1.0)
+      1..N     = pathology index in `pathologies`
+    A disease row qualifies only when exactly the target pathology is 1.0
+    and every other real-disease column is NOT 1.0.
+    """
+    if row.get('No Finding', float('nan')) == 1.0:
+        return 0
+    for i, path in enumerate(pathologies, start=1):
+        if row.get(path, float('nan')) == 1.0:
+            others = co_disease_cols_per_pathology[i - 1]
+            if not any(row.get(c, float('nan')) == 1.0 for c in others):
+                return i
+    return None
+
+
 def process_split(csv_path, chexpert_root, out_dir, split, resolution,
-                  vae, device, batch_size, max_samples=None):
+                  vae, device, batch_size, pathologies, max_samples=None):
     images_dir = os.path.join(out_dir, 'images', split)
     features_dir = os.path.join(out_dir, 'vae-sd', split)
     os.makedirs(images_dir, exist_ok=True)
@@ -68,23 +98,40 @@ def process_split(csv_path, chexpert_root, out_dir, split, resolution,
     if 'Frontal/Lateral' in df.columns:
         df = df[df['Frontal/Lateral'] == 'Frontal'].reset_index(drop=True)
 
-    has_no_finding = 'No Finding' in df.columns
+    # For each target pathology, build the set of columns that disqualify a row
+    # (all real-disease cols present in the CSV, minus the target and NON_DISEASE_COLS)
+    co_disease_cols_per_pathology = []
+    for path in pathologies:
+        excluded = NON_DISEASE_COLS | {path}
+        cols = [c for c in ALL_DISEASE_COLS if c not in excluded and c in df.columns]
+        co_disease_cols_per_pathology.append(cols)
 
     # collect valid (path, label) pairs
     entries = []
+    class_counts = {0: 0}
+    for i in range(1, len(pathologies) + 1):
+        class_counts[i] = 0
+
     limit = max_samples if max_samples is not None else len(df)
     for i in range(min(limit, len(df))):
         row = df.iloc[i]
-        # strip leading folder component from path (e.g. "CheXpert-v1.0-small/")
+        label = _get_label(row, pathologies, co_disease_cols_per_pathology)
+        if label is None:
+            continue
         img_rel = row['Path'].replace('\\', '/')
         parts = img_rel.split('/', 1)
         img_rel = parts[1] if len(parts) > 1 else parts[0]
         img_path = os.path.join(chexpert_root, img_rel)
         if not os.path.isfile(img_path):
             continue
-        nf = row['No Finding'] if has_no_finding else float('nan')
-        label = 0 if nf == 1.0 else 1
         entries.append((img_path, label))
+        class_counts[label] += 1
+
+    label_names = ['Healthy'] + list(pathologies)
+    print(f'\n[{split}] class distribution:')
+    for idx, name in enumerate(label_names):
+        print(f'  {idx} ({name}): {class_counts[idx]}')
+    print(f'  Total: {sum(class_counts.values())}')
 
     resize_norm = transforms.Compose([
         transforms.Resize((resolution, resolution),
@@ -152,15 +199,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out-dir', type=str, default='./data/chexpert_256')
     parser.add_argument('--chexpert-root', type=str, required=True,
-                        help='Path to CheXpert-v1.0-small/ (contains train.csv, valid.csv, train/, valid/)')
-    parser.add_argument('--kaggle-json', type=str, default=None,
-                        help='Path to kaggle.json)')
+                        help='Path to CheXpert-v1.0-small/ (contains train.csv, valid.csv)')
+    parser.add_argument('--kaggle-json', type=str, default=None)
     parser.add_argument('--resolution', type=int, default=256)
     parser.add_argument('--batch-size', type=int, default=32)
-    parser.add_argument('--vae-model', type=str, default='stabilityai/sd-vae-ft-mse')
     parser.add_argument('--vae-type', type=str, default='sd', choices=['sd', 'medvae'])
     parser.add_argument('--max-samples', type=int, default=None,
-                        help='Max samples per split (None = all)')
+                        help='Max rows to scan per split (None = all)')
+    parser.add_argument('--pathologies', nargs='+',
+                        default=['Pleural Effusion'],
+                        help='Target pathology names (single-label rows only). '
+                             'E.g. --pathologies "Pleural Effusion" "Cardiomegaly"')
     args = parser.parse_args()
 
     download_chexpert(args.chexpert_root, args.kaggle_json)
@@ -171,6 +220,7 @@ def main():
         else 'cpu'
     )
     print(f'Using device: {device}')
+    print(f'Target pathologies: {args.pathologies}')
 
     print('Loading VAE...')
     vae = load_vae(args.vae_type, device)
@@ -178,12 +228,14 @@ def main():
     process_split(
         os.path.join(args.chexpert_root, 'train.csv'),
         args.chexpert_root, args.out_dir, 'train',
-        args.resolution, vae, device, args.batch_size, args.max_samples
+        args.resolution, vae, device, args.batch_size,
+        args.pathologies, args.max_samples,
     )
     process_split(
         os.path.join(args.chexpert_root, 'valid.csv'),
         args.chexpert_root, args.out_dir, 'val',
-        args.resolution, vae, device, args.batch_size, max_samples=None
+        args.resolution, vae, device, args.batch_size,
+        args.pathologies, max_samples=None,
     )
 
 
