@@ -92,18 +92,23 @@ def main(args):
             t0=args.t0,                       # start staircase from t0, not from 1
         ).to(torch.float32)
 
-        # decode to pixels
-        decoded = vae.decode((z_cf - latents_bias) / latents_scale) # reverses the normalization
-        samples = decoded if isinstance(decoded, torch.Tensor) else decoded.sample
-        samples = (samples + 1) / 2.
-        samples = torch.clamp(255. * samples, 0, 255).permute(0, 2, 3, 1).to('cpu', dtype=torch.uint8).numpy()
+        # decode counterfactuals to pixels
+        decoded_cf = vae.decode((z_cf - latents_bias) / latents_scale)
+        samples_cf = decoded_cf if isinstance(decoded_cf, torch.Tensor) else decoded_cf.sample
+        samples_cf = torch.clamp(255. * (samples_cf + 1) / 2., 0, 255).permute(0, 2, 3, 1).to('cpu', dtype=torch.uint8).numpy()
 
-        #saves images
-        for i, sample in enumerate(samples):
+        # decode real images to pixels
+        decoded_real = vae.decode((z0 - latents_bias) / latents_scale)
+        samples_real = decoded_real if isinstance(decoded_real, torch.Tensor) else decoded_real.sample
+        samples_real = torch.clamp(255. * (samples_real + 1) / 2., 0, 255).permute(0, 2, 3, 1).to('cpu', dtype=torch.uint8).numpy()
+
+        # save both real and counterfactual
+        for i, (sample_cf, sample_real) in enumerate(zip(samples_cf, samples_real)):
             original_label = labels[i].item()
             cf_label = y_cf[i].item()
-            fname = f'{total + i:06d}_from{original_label}_to{cf_label}.png'
-            Image.fromarray(sample).save(os.path.join(args.output_dir, fname))
+            stem = f'{total + i:06d}_from{original_label}_to{cf_label}'
+            Image.fromarray(sample_real).save(os.path.join(args.output_dir, f'{stem}_real.png'))
+            Image.fromarray(sample_cf).save(os.path.join(args.output_dir, f'{stem}_cf.png'))
 
         total += len(samples)
         print(f'Generated {total} counterfactuals')
