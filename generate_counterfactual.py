@@ -97,13 +97,11 @@ def main(args):
         samples_cf = decoded_cf if isinstance(decoded_cf, torch.Tensor) else decoded_cf.sample
         samples_cf = torch.clamp(255. * (samples_cf + 1) / 2., 0, 255).permute(0, 2, 3, 1).to('cpu', dtype=torch.uint8).numpy()
 
-        # decode real images to pixels
-        decoded_real = vae.decode((z0 - latents_bias) / latents_scale)
-        samples_real = decoded_real if isinstance(decoded_real, torch.Tensor) else decoded_real.sample
-        samples_real = torch.clamp(255. * (samples_real + 1) / 2., 0, 255).permute(0, 2, 3, 1).to('cpu', dtype=torch.uint8).numpy()
+        # real images come directly from the dataset (no VAE round-trip)
+        samples_real = raw_images.permute(0, 2, 3, 1).cpu().numpy()
 
-        # save both real and counterfactual
-        for i, (sample_cf, sample_real) in enumerate(zip(samples_cf, samples_real)):
+        # save both real and counterfactual with matching index
+        for i, (sample_real, sample_cf) in enumerate(zip(samples_real, samples_cf)):
             original_label = labels[i].item()
             cf_label = y_cf[i].item()
             stem = f'{total + i:06d}_from{original_label}_to{cf_label}'
