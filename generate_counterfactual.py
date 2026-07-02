@@ -110,7 +110,7 @@ def main(args):
             Image.fromarray(sample_real).save(os.path.join(args.output_dir, f'{stem}_real.png'))
             Image.fromarray(sample_cf).save(os.path.join(args.output_dir, f'{stem}_cf.png'))
 
-        total += len(samples)
+        total += len(samples_cf)
         print(f'Generated {total} counterfactuals')
 
         if 0 < args.num_samples <= total:
