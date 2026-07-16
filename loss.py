@@ -49,7 +49,7 @@ class SILoss:
 
         return alpha_t, sigma_t, d_alpha_t, d_sigma_t
 
-    def __call__(self, model, images, model_kwargs=None, zs=None):
+    def __call__(self, model, images, model_kwargs=None, zs=None, x_source=None):
         if model_kwargs == None:
             model_kwargs = {}
         # sample timesteps
@@ -63,17 +63,24 @@ class SILoss:
                 time_input = sigma / (1 + sigma)
             elif self.path_type == "cosine":
                 time_input = 2 / np.pi * torch.atan(sigma)
-                
+
         time_input = time_input.to(device=images.device, dtype=images.dtype)
-        
-        noises = torch.randn_like(images)
-        alpha_t, sigma_t, d_alpha_t, d_sigma_t = self.interpolant(time_input)
-            
-        model_input = alpha_t * images + sigma_t * noises
-        if self.prediction == 'v':
-            model_target = d_alpha_t * images + d_sigma_t * noises
+
+        if x_source is not None:
+            # I2SB image bridge: x_t = (1-t)*x_target + t*x_source
+            # t=0 → x_target (PE), t=1 → x_source (Healthy)
+            # velocity target = x_source - x_target (constant vector field)
+            model_input = (1 - time_input) * images + time_input * x_source
+            model_target = x_source - images
         else:
-            raise NotImplementedError() # TODO: add x or eps prediction
+            noises = torch.randn_like(images)
+            alpha_t, sigma_t, d_alpha_t, d_sigma_t = self.interpolant(time_input)
+            model_input = alpha_t * images + sigma_t * noises
+            if self.prediction == 'v':
+                model_target = d_alpha_t * images + d_sigma_t * noises
+            else:
+                raise NotImplementedError()
+
         model_output, zs_tilde  = model(model_input, time_input.flatten(), **model_kwargs)
         denoising_loss = mean_flat((model_output - model_target) ** 2)
 

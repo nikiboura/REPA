@@ -78,13 +78,13 @@ class CustomDataset(Dataset):
 
 class LatentDataset(Dataset):
     """
-    CIFAR-10 dataset that returns (raw_image, vae_moments, label).
+    Returns (raw_image, vae_moments, label)
 
     raw_image  : uint8 tensor (3, resolution, resolution)
     vae_moments: float32 tensor (8, resolution//8, resolution//8) — pre-computed VAE moments
     label      : int64 scalar
 
-    Pre-compute vae_moments with prepare_cifar10.py before training.
+    Pre-compute vae_moments before training.
     Expected layout on disk:
         <data_dir>/images/<split>/<idx>.png
         <data_dir>/vae-sd/<split>/<idx>.npy

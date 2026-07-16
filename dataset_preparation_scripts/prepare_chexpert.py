@@ -29,6 +29,7 @@ Only frontal views are kept.
 import argparse
 import json
 import os
+import random
 import shutil
 import subprocess
 
@@ -128,10 +129,28 @@ def process_split(csv_path, chexpert_root, out_dir, split, resolution,
         class_counts[label] += 1
 
     label_names = ['Healthy'] + list(pathologies)
-    print(f'\n[{split}] class distribution:')
+    print(f'\n[{split}] class distribution before balancing:')
     for idx, name in enumerate(label_names):
         print(f'  {idx} ({name}): {class_counts[idx]}')
     print(f'  Total: {sum(class_counts.values())}')
+
+    # Balance classes: keep exactly min(count_per_class) samples from each class
+    entries_by_class = {}
+    for img_path, label in entries:
+        entries_by_class.setdefault(label, []).append((img_path, label))
+    min_count = min(len(v) for v in entries_by_class.values())
+    balanced = []
+    for cls_idx in sorted(entries_by_class.keys()):
+        cls_entries = entries_by_class[cls_idx]
+        random.Random(42).shuffle(cls_entries)
+        balanced.extend(cls_entries[:min_count])
+    random.Random(42).shuffle(balanced)
+    entries = balanced
+
+    print(f'\n[{split}] class distribution after balancing ({min_count} per class):')
+    for idx, name in enumerate(label_names):
+        print(f'  {idx} ({name}): {min_count}')
+    print(f'  Total: {len(entries)}')
 
     resize_norm = transforms.Compose([
         transforms.Resize((resolution, resolution),

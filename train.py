@@ -298,30 +298,52 @@ def main(args):
             raw_image = raw_image.to(device)
             x = x.squeeze(dim=1).to(device)
             y = y.to(device)
-            z = None
-            if args.legacy:
-                # In our early experiments, we accidentally apply label dropping twice: 
-                # once in train.py and once in sit.py. 
-                # We keep this option for exact reproducibility with previous runs.
-                drop_ids = torch.rand(y.shape[0], device=y.device) < args.cfg_prob
-                labels = torch.where(drop_ids, args.num_classes, y)
-            else:
-                labels = y
             with torch.no_grad():
                 x = sample_posterior(x, latents_scale=latents_scale, latents_bias=latents_bias)
+
+                # I2SB cross-class pairing: match each Healthy with a PE and vice versa
+                idx0 = torch.where(y == 0)[0]   # Healthy indices in this batch
+                idx1 = torch.where(y == 1)[0]   # PE indices in this batch
+                n0, n1 = len(idx0), len(idx1)
+                min_n = min(n0, n1)
+                if min_n == 0:
+                    continue  # skip batch if one class is entirely absent
+
+                # Random permutation within each class so pairings vary each step
+                perm0 = torch.randperm(n0, device=device)[:min_n]
+                perm1 = torch.randperm(n1, device=device)[:min_n]
+
+                # Two directions in the same batch:
+                # rows 0..min_n-1  : source=Healthy(t=1) → target=PE(t=0),      label=1
+                # rows min_n..2*min_n-1: source=PE(t=1)  → target=Healthy(t=0), label=0
+                tgt_idx = torch.cat([idx1[perm1], idx0[perm0]])
+                src_idx = torch.cat([idx0[perm0], idx1[perm1]])
+
+                x_target = x[tgt_idx]
+                x_source = x[src_idx]
+                y_target = y[tgt_idx]
+                raw_image_target = raw_image[tgt_idx]
+
+                # REPA teacher features come from the TARGET image (what the model must arrive at)
                 zs = []
                 with accelerator.autocast():
                     for encoder, encoder_type, arch in zip(encoders, encoder_types, architectures):
-                        raw_image_ = preprocess_raw_image(raw_image, encoder_type)
+                        raw_image_ = preprocess_raw_image(raw_image_target, encoder_type)
                         z = encoder.forward_features(raw_image_)
                         if 'mocov3' in encoder_type: z = z[:, 1:]
                         if 'dinov2' in encoder_type or 'meddinov3' in encoder_type:
                             z = z['x_norm_patchtokens']
                         zs.append(z)
 
+            if args.legacy:
+                drop_ids = torch.rand(y_target.shape[0], device=y_target.device) < args.cfg_prob
+                labels = torch.where(drop_ids, args.num_classes, y_target)
+            else:
+                labels = y_target
+
             with accelerator.accumulate(model):
                 model_kwargs = dict(y=labels)
-                loss, proj_loss = loss_fn(model, x, model_kwargs, zs=zs)
+                loss, proj_loss = loss_fn(model, x_target, model_kwargs, zs=zs, x_source=x_source)
                 loss_mean = loss.mean()
                 proj_loss_mean = proj_loss.mean()
                 loss = loss_mean + proj_loss_mean * args.proj_coeff
