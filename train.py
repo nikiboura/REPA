@@ -200,12 +200,13 @@ def main(args):
     # create loss function
     loss_fn = SILoss(
         prediction=args.prediction,
-        path_type=args.path_type, 
+        path_type=args.path_type,
         encoders=encoders,
         accelerator=accelerator,
         latents_scale=latents_scale,
         latents_bias=latents_bias,
-        weighting=args.weighting
+        weighting=args.weighting,
+        beta_max=args.beta_max,
     )
     if accelerator.is_main_process:
         logger.info(f"SiT Parameters: {sum(p.numel() for p in model.parameters()):,}")
@@ -477,6 +478,8 @@ def parse_args(input_args=None):
                         help="Path to a larger SiT checkpoint for weight-selection initialization")
     parser.add_argument("--proj-coeff", type=float, default=0.5)
     parser.add_argument("--weighting", default="uniform", type=str, help="Max gradient norm.")
+    parser.add_argument("--beta-max", type=float, default=3.0,
+                        help="I2SB bridge width: controls noise added during training (symmetric schedule).")
     parser.add_argument("--legacy", action=argparse.BooleanOptionalAction, default=False)
 
     if input_args is not None:
