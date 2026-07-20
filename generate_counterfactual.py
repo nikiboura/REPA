@@ -23,7 +23,7 @@ def _sigma_sq(t, beta_max):
 
 
 @torch.no_grad()
-def ddpm_bridge_sampler(model, z_source, y, num_steps, beta_max, cfg_scale):
+def ddpm_bridge_sampler(model, z_source, y, num_steps, beta_max, cfg_scale, cond=None, ot_ode=False):
     """
     I2SB Algorithm 2: DDPM backward from X1 (Healthy, t=1) to X0 (PE, t=0).
 
@@ -31,6 +31,11 @@ def ddpm_bridge_sampler(model, z_source, y, num_steps, beta_max, cfg_scale):
       1. Predict ε = (Xt - X0) / σt  →  recover X0_pred = Xt - σt * ε_pred
       2. Sample X_{n-1} ~ p(X_{n-1} | X0_pred, Xn)  using the DDPM posterior
          derived in Proof of Proposition 3.3.
+
+    cond: optional source-latent conditioning (I2SB's cond_x1) — constant across all steps,
+          must match whatever `--cond-x1` setting the checkpoint was trained with.
+    ot_ode: deterministic bridge (no noise in the posterior step) — matches official I2SB's
+            --ot-ode; must match training.
     """
     device = z_source.device
     dtype  = z_source.dtype
@@ -50,16 +55,19 @@ def ddpm_bridge_sampler(model, z_source, y, num_steps, beta_max, cfg_scale):
         t_prev = ts[i + 1]  # previous time
 
         # ── 1. model forward (with optional CFG) ──────────────────────────────
-        t_input = torch.full((Xn.shape[0],), t_cur.item(), device=device, dtype=dtype)
-
         if cfg_scale > 1.0:
             m_in  = torch.cat([Xn.to(dtype)] * 2)
             y_in  = torch.cat([y, y_null])
+            cond_in = torch.cat([cond, cond]) if cond is not None else None
         else:
             m_in = Xn.to(dtype)
             y_in = y
+            cond_in = cond
 
-        eps_pred = model(m_in, t_input, y=y_in)[0].double()
+        # t_input batch size must track m_in (doubled under CFG), not Xn
+        t_input = torch.full((m_in.shape[0],), t_cur.item(), device=device, dtype=dtype)
+
+        eps_pred = model(m_in, t_input, y=y_in, cond=cond_in)[0].double()
 
         if cfg_scale > 1.0:
             eps_cond, eps_uncond = eps_pred.chunk(2)
@@ -82,10 +90,12 @@ def ddpm_bridge_sampler(model, z_source, y, num_steps, beta_max, cfg_scale):
             # Posterior mean
             mu_prev = (alpha_sq / denom) * X0_pred + (ssq_prev / denom) * Xn
 
-            # Posterior variance  (zero when ssq_prev=0, i.e. at t→0)
-            var_prev = (alpha_sq * ssq_prev / denom).clamp(min=0.0)
-
-            Xn = mu_prev + var_prev.sqrt() * torch.randn_like(Xn)
+            if ot_ode:
+                Xn = mu_prev
+            else:
+                # Posterior variance  (zero when ssq_prev=0, i.e. at t→0)
+                var_prev = (alpha_sq * ssq_prev / denom).clamp(min=0.0)
+                Xn = mu_prev + var_prev.sqrt() * torch.randn_like(Xn)
 
     return Xn.to(dtype)
 
@@ -98,12 +108,14 @@ def main(args):
     z_dims = [int(z) for z in args.projector_embed_dims.split(',') if z] if args.projector_embed_dims else []
 
     block_kwargs = {"fused_attn": args.fused_attn, "qk_norm": args.qk_norm}
+    cond_channels = 4 if args.cond_x1 else 0
     model = SiT_models[args.model](
         input_size=latent_size,
         num_classes=args.num_classes,
         use_cfg=(args.cfg_scale > 1.0),
         z_dims=z_dims,
         encoder_depth=args.encoder_depth,
+        cond_channels=cond_channels,
         **block_kwargs,
     ).to(device)
 
@@ -134,6 +146,7 @@ def main(args):
         y_pe = torch.ones(z_source.shape[0], dtype=torch.long, device=device)
 
         # Algorithm 2: DDPM backward  X1 (Healthy) → X0 (PE)
+        cond = z_source if args.cond_x1 else None
         z_pe = ddpm_bridge_sampler(
             model=model,
             z_source=z_source,
@@ -141,6 +154,8 @@ def main(args):
             num_steps=args.num_steps,
             beta_max=args.beta_max,
             cfg_scale=args.cfg_scale,
+            cond=cond,
+            ot_ode=args.ot_ode,
         ).to(torch.float32)
 
         # Decode generated PE latent → pixel image
@@ -183,8 +198,12 @@ if __name__ == '__main__':
 
     parser.add_argument('--num-steps', type=int, default=200,
                         help='DDPM backward steps (paper uses 1000; 200 is faster with little quality loss)')
-    parser.add_argument('--beta-max', type=float, default=3.0,
+    parser.add_argument('--beta-max', type=float, default=0.3,
                         help='Controls bridge width; must match value used in training')
+    parser.add_argument('--cond-x1', action=argparse.BooleanOptionalAction, default=False,
+                        help='Condition the network on the source (Healthy) latent; must match training.')
+    parser.add_argument('--ot-ode', action=argparse.BooleanOptionalAction, default=False,
+                        help='Deterministic bridge sampling (no posterior noise); must match training.')
     parser.add_argument('--cfg-scale', type=float, default=3.0)
 
     parser.add_argument('--batch-size',  type=int, default=8)

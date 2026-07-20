@@ -178,12 +178,14 @@ class SiT(nn.Module):
         use_cfg=False,
         z_dims=[768],
         projector_dim=2048,
+        cond_channels=0,
         **block_kwargs # fused_attn
     ):
         super().__init__()
         self.path_type = path_type
         self.in_channels = in_channels
         self.out_channels = in_channels
+        self.cond_channels = cond_channels
         self.patch_size = patch_size
         self.num_heads = num_heads
         self.use_cfg = use_cfg
@@ -192,7 +194,7 @@ class SiT(nn.Module):
         self.encoder_depth = encoder_depth
 
         self.x_embedder = PatchEmbed(
-            input_size, patch_size, in_channels, hidden_size, bias=True
+            input_size, patch_size, in_channels + cond_channels, hidden_size, bias=True
             )
         self.t_embedder = TimestepEmbedder(hidden_size) # timestep embedding type
         self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
@@ -262,13 +264,17 @@ class SiT(nn.Module):
         imgs = x.reshape(shape=(x.shape[0], c, h * p, w * p))
         return imgs
     
-    def forward(self, x, t, y, return_logvar=False):
+    def forward(self, x, t, y, cond=None, return_logvar=False):
         """
         Forward pass of SiT.
         x: (N, C, H, W) tensor of spatial inputs (images or latent representations of images)
         t: (N,) tensor of diffusion timesteps
         y: (N,) tensor of class labels
+        cond: (N, cond_channels, H, W) optional conditioning (e.g. I2SB source/x1 latent),
+              concatenated channel-wise before patchifying. Requires cond_channels > 0.
         """
+        if self.cond_channels > 0:
+            x = torch.cat([x, cond], dim=1)
         x = self.x_embedder(x) + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
         N, T, D = x.shape
 

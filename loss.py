@@ -24,7 +24,9 @@ class SILoss:
             accelerator=None,
             latents_scale=None,
             latents_bias=None,
-            beta_max=3.0,
+            beta_max=0.3,
+            cond_x1=False,
+            ot_ode=False,
             ):
         self.prediction = prediction
         self.weighting = weighting
@@ -34,6 +36,8 @@ class SILoss:
         self.latents_scale = latents_scale
         self.latents_bias = latents_bias
         self.beta_max = beta_max
+        self.cond_x1 = cond_x1
+        self.ot_ode = ot_ode
 
     def _sigma_sq(self, t):
         """σ²t = ∫₀ᵗ βτ dτ  where βt = 4*beta_max*t*(1-t)  (symmetric schedule)"""
@@ -92,9 +96,12 @@ class SILoss:
             # Σt: bridge variance (zero at both endpoints, max at t=0.5)
             variance_t = (sigma_sq_t * sigma_bar_sq_t / sigma_sq_total).clamp(min=1e-8)
 
-            # Sample Xt ~ q(Xt|X0, X1)
-            eps = torch.randn_like(images)
-            model_input = mu_t + variance_t.sqrt() * eps
+            # Sample Xt ~ q(Xt|X0, X1)  (ot_ode: deterministic, no bridge noise — matches I2SB's ot_ode flag)
+            if self.ot_ode:
+                model_input = mu_t
+            else:
+                eps = torch.randn_like(images)
+                model_input = mu_t + variance_t.sqrt() * eps
 
             # Eq. 12: model predicts (Xt - X0) / σt
             sigma_t = sigma_sq_t.sqrt().clamp(min=1e-4)
@@ -108,7 +115,8 @@ class SILoss:
             else:
                 raise NotImplementedError()
 
-        model_output, zs_tilde  = model(model_input, time_input.flatten(), **model_kwargs)
+        cond = x_source if (self.cond_x1 and x_source is not None) else None
+        model_output, zs_tilde  = model(model_input, time_input.flatten(), cond=cond, **model_kwargs)
         denoising_loss = mean_flat((model_output - model_target) ** 2)
 
         # projection loss
