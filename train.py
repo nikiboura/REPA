@@ -314,11 +314,9 @@ def main(args):
                 perm0 = torch.randperm(n0, device=device)[:min_n]
                 perm1 = torch.randperm(n1, device=device)[:min_n]
 
-                # Two directions in the same batch:
-                # rows 0..min_n-1  : source=Healthy(t=1) → target=PE(t=0),      label=1
-                # rows min_n..2*min_n-1: source=PE(t=1)  → target=Healthy(t=0), label=0
-                tgt_idx = torch.cat([idx1[perm1], idx0[perm0]])
-                src_idx = torch.cat([idx0[perm0], idx1[perm1]])
+                # Single direction: source=Healthy(t=1) → target=PE(t=0)
+                tgt_idx = idx1[perm1]
+                src_idx = idx0[perm0]
 
                 x_target = x[tgt_idx]
                 x_source = x[src_idx]
