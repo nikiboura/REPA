@@ -4,6 +4,7 @@ import argparse
 import numpy as np
 from PIL import Image
 from torch.utils.data import DataLoader
+import wandb
 
 from models.sit import SiT_models
 from diffusers.models import AutoencoderKL
@@ -135,6 +136,10 @@ def main(args):
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
     os.makedirs(args.output_dir, exist_ok=True)
 
+    if args.report_to == 'wandb':
+        wandb.init(project=args.wandb_project, name=args.wandb_name)
+        wandb_table = wandb.Table(columns=['id', 'healthy', 'counterfactual_pe'])
+
     total = 0
     for raw_images, moments, _ in dataloader:
         moments = moments.to(device)
@@ -169,12 +174,18 @@ def main(args):
             stem = f'{total + i:06d}'
             Image.fromarray(real).save(os.path.join(args.output_dir, f'{stem}_healthy.png'))
             Image.fromarray(pe).save(os.path.join(args.output_dir, f'{stem}_pe.png'))
+            if args.report_to == 'wandb':
+                wandb_table.add_data(stem, wandb.Image(real), wandb.Image(pe))
 
         total += len(samples_pe)
         print(f'Generated {total} pairs')
 
         if 0 < args.num_samples <= total:
             break
+
+    if args.report_to == 'wandb':
+        wandb.log({'counterfactuals': wandb_table})
+        wandb.finish()
 
     print(f'Done. Saved {total} pairs to {args.output_dir}')
 
@@ -186,6 +197,12 @@ if __name__ == '__main__':
     parser.add_argument('--data-dir', type=str, required=True)
     parser.add_argument('--output-dir', type=str, default='./generated_pe')
     parser.add_argument('--split',   type=str, default='test')
+
+    parser.add_argument('--report-to', type=str, default='none', choices=['none', 'wandb'],
+                        help="Log generated Healthy/PE pairs to Weights & Biases as a table.")
+    parser.add_argument('--wandb-project', type=str, default='REPA')
+    parser.add_argument('--wandb-name', type=str, default=None,
+                        help="W&B run name; defaults to wandb's auto-generated name if unset.")
 
     parser.add_argument('--model',   type=str, default='SiT-S/4')
     parser.add_argument('--num-classes', type=int, default=2)
