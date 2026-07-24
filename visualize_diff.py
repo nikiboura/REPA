@@ -17,6 +17,7 @@ import os
 
 import numpy as np
 from PIL import Image
+import wandb
 
 
 def compute_diff_overlay(source_gray, target_gray, alpha=0.6, threshold=0.0):
@@ -79,6 +80,8 @@ def process_pair(healthy_path, pe_path, out_path, alpha, threshold):
     panel = make_panel(np.array(healthy), np.array(pe), diff_rgb)
     panel.save(out_path)
 
+    return np.array(healthy), np.array(pe), diff_rgb
+
 
 def main(args):
     os.makedirs(args.output_dir, exist_ok=True)
@@ -87,6 +90,10 @@ def main(args):
     if not healthy_files:
         print(f'No *_healthy.png files found in {args.pairs_dir}')
         return
+
+    if args.report_to == 'wandb':
+        wandb.init(project=args.wandb_project, name=args.wandb_name)
+        wandb_table = wandb.Table(columns=['id', 'healthy', 'counterfactual_pe', 'diff'])
 
     count = 0
     for healthy_path in healthy_files:
@@ -97,8 +104,14 @@ def main(args):
             continue
 
         out_path = os.path.join(args.output_dir, f'{stem}_diff.png')
-        process_pair(healthy_path, pe_path, out_path, args.alpha, args.threshold)
+        healthy_arr, pe_arr, diff_arr = process_pair(healthy_path, pe_path, out_path, args.alpha, args.threshold)
+        if args.report_to == 'wandb':
+            wandb_table.add_data(stem, wandb.Image(healthy_arr), wandb.Image(pe_arr), wandb.Image(diff_arr))
         count += 1
+
+    if args.report_to == 'wandb':
+        wandb.log({'diff_visualizations': wandb_table})
+        wandb.finish()
 
     print(f'Saved {count} diff panels to {args.output_dir}')
 
@@ -114,6 +127,12 @@ if __name__ == '__main__':
     parser.add_argument('--threshold', type=float, default=0.05,
                         help="Fraction of max abs diff below which pixels are left uncolored, "
                              "to suppress near-uniform sampling noise.")
+
+    parser.add_argument('--report-to', type=str, default='none', choices=['none', 'wandb'],
+                        help="Log healthy/pe/diff triples to Weights & Biases as a table.")
+    parser.add_argument('--wandb-project', type=str, default='REPA')
+    parser.add_argument('--wandb-name', type=str, default=None,
+                        help="W&B run name; defaults to wandb's auto-generated name if unset.")
     args = parser.parse_args()
 
     main(args)
