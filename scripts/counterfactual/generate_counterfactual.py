@@ -1,10 +1,15 @@
 import torch
 import os
+import sys
 import argparse
 import numpy as np
 from PIL import Image
 from torch.utils.data import DataLoader
 import wandb
+
+# scripts/counterfactual/ builds on top of the standard implementation in
+# scripts/ — add it to the path so models/ and dataset.py resolve.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from models.sit import SiT_models
 from diffusers.models import AutoencoderKL

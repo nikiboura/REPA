@@ -18,7 +18,7 @@ else
 fi
 
 # A — SD VAE (no REPA)
-python train.py \
+python scripts/train.py \
   --exp-name sit-chexpert-sdvae \
   --output-dir $OUTPUT_DIR \
   --model $MODEL \
@@ -39,7 +39,7 @@ python train.py \
   --report-to none
 
 # B — MedVAE (no REPA)
-python train.py \
+python scripts/train.py \
   --exp-name sit-chexpert-medvae \
   --output-dir $OUTPUT_DIR \
   --model $MODEL \
@@ -60,7 +60,7 @@ python train.py \
   --report-to none
 
 # C — MedVAE + REPA
-python train.py \
+python scripts/train.py \
   --exp-name sit-chexpert-medvae-repa \
   --output-dir $OUTPUT_DIR \
   --model $MODEL \
@@ -81,7 +81,7 @@ python train.py \
   --report-to none
 
 # D — SD VAE + REPA
-python train.py \
+python scripts/train.py \
   --exp-name sit-chexpert-sdvae-repa \
   --output-dir $OUTPUT_DIR \
   --model $MODEL \

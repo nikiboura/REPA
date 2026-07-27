@@ -17,7 +17,7 @@ else
 fi
 
 # A — SD VAE
-torchrun --nproc_per_node=1 generate.py \
+torchrun --nproc_per_node=1 scripts/generate.py \
   --model $MODEL \
   --ckpt $OUTPUT_DIR/sit-chexpert-sdvae/checkpoints/${CKPT_STEP}.pt \
   --sample-dir $OUTPUT_DIR/sit-chexpert-sdvae/samples \
@@ -31,7 +31,7 @@ torchrun --nproc_per_node=1 generate.py \
   --vae mse
 
 # B — MedVAE
-torchrun --nproc_per_node=1 generate.py \
+torchrun --nproc_per_node=1 scripts/generate.py \
   --model $MODEL \
   --ckpt $OUTPUT_DIR/sit-chexpert-medvae/checkpoints/${CKPT_STEP}.pt \
   --sample-dir $OUTPUT_DIR/sit-chexpert-medvae/samples \
@@ -45,7 +45,7 @@ torchrun --nproc_per_node=1 generate.py \
   --vae medvae
 
 # C — MedVAE + REPA
-torchrun --nproc_per_node=1 generate.py \
+torchrun --nproc_per_node=1 scripts/generate.py \
   --model $MODEL \
   --ckpt $OUTPUT_DIR/sit-chexpert-medvae-repa/checkpoints/${CKPT_STEP}.pt \
   --sample-dir $OUTPUT_DIR/sit-chexpert-medvae-repa/samples \
@@ -60,7 +60,7 @@ torchrun --nproc_per_node=1 generate.py \
   --projector-embed-dims 768
 
 # D — SD VAE + REPA
-torchrun --nproc_per_node=1 generate.py \
+torchrun --nproc_per_node=1 scripts/generate.py \
   --model $MODEL \
   --ckpt $OUTPUT_DIR/sit-chexpert-sdvae-repa/checkpoints/${CKPT_STEP}.pt \
   --sample-dir $OUTPUT_DIR/sit-chexpert-sdvae-repa/samples \

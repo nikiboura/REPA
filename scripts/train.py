@@ -13,7 +13,6 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from tqdm.auto import tqdm
 from torch.utils.data import DataLoader
-from scipy.optimize import linear_sum_assignment
 
 from accelerate import Accelerator
 from accelerate.logging import get_logger
@@ -167,17 +166,12 @@ def main(args):
         encoders, encoder_types, architectures = [], [], []
     z_dims = [encoder.embed_dim for encoder in encoders]
     block_kwargs = {"fused_attn": args.fused_attn, "qk_norm": args.qk_norm}
-    # cond_channels: latent channel count (4) when conditioning the network on the source
-    # (x1/Healthy) latent directly, matching official I2SB's --cond-x1 (network.py concatenates
-    # cond channel-wise before the input conv). 0 disables it (network only sees Xt + class label).
-    cond_channels = 4 if args.cond_x1 else 0
     model = SiT_models[args.model](
         input_size=latent_size,
         num_classes=args.num_classes,
         use_cfg = (args.cfg_prob > 0),
         z_dims = z_dims,
         encoder_depth=args.encoder_depth,
-        cond_channels=cond_channels,
         **block_kwargs
     )
 
@@ -206,15 +200,12 @@ def main(args):
     # create loss function
     loss_fn = SILoss(
         prediction=args.prediction,
-        path_type=args.path_type,
+        path_type=args.path_type, 
         encoders=encoders,
         accelerator=accelerator,
         latents_scale=latents_scale,
         latents_bias=latents_bias,
-        weighting=args.weighting,
-        beta_max=args.beta_max,
-        cond_x1=args.cond_x1,
-        ot_ode=args.ot_ode,
+        weighting=args.weighting
     )
     if accelerator.is_main_process:
         logger.info(f"SiT Parameters: {sum(p.numel() for p in model.parameters()):,}")
@@ -307,57 +298,30 @@ def main(args):
             raw_image = raw_image.to(device)
             x = x.squeeze(dim=1).to(device)
             y = y.to(device)
+            z = None
+            if args.legacy:
+                # In our early experiments, we accidentally apply label dropping twice: 
+                # once in train.py and once in sit.py. 
+                # We keep this option for exact reproducibility with previous runs.
+                drop_ids = torch.rand(y.shape[0], device=y.device) < args.cfg_prob
+                labels = torch.where(drop_ids, args.num_classes, y)
+            else:
+                labels = y
             with torch.no_grad():
                 x = sample_posterior(x, latents_scale=latents_scale, latents_bias=latents_bias)
-
-                # I2SB cross-class pairing: match each Healthy with a PE
-                idx0 = torch.where(y == 0)[0]   # Healthy indices in this batch
-                idx1 = torch.where(y == 1)[0]   # PE indices in this batch
-                n0, n1 = len(idx0), len(idx1)
-                if n0 == 0 or n1 == 0:
-                    continue  # skip batch if one class is entirely absent
-
-                # Minibatch OT coupling: pair each Healthy latent with its nearest PE latent
-                # (Hungarian algorithm on pairwise L2 distance) instead of a random permutation.
-                # Unlike I2SB's corruption tasks (where x0/x1 are the same image), our x0/x1 come
-                # from different patients, so there's no natural correspondence — OT coupling gives
-                # the network a more consistent, lower-variance transport map to learn than an
-                # arbitrary random pairing would. linear_sum_assignment handles n0 != n1 directly,
-                # returning min(n0, n1) optimally matched pairs.
-                cost = torch.cdist(
-                    x[idx0].flatten(1), x[idx1].flatten(1), p=2
-                ).cpu().numpy()
-                row_ind, col_ind = linear_sum_assignment(cost)
-
-                # Single direction: source=Healthy(t=1) → target=PE(t=0)
-                src_idx = idx0[row_ind]
-                tgt_idx = idx1[col_ind]
-
-                x_target = x[tgt_idx]
-                x_source = x[src_idx]
-                y_target = y[tgt_idx]
-                raw_image_target = raw_image[tgt_idx]
-
-                # REPA teacher features come from the TARGET image (what the model must arrive at)
                 zs = []
                 with accelerator.autocast():
                     for encoder, encoder_type, arch in zip(encoders, encoder_types, architectures):
-                        raw_image_ = preprocess_raw_image(raw_image_target, encoder_type)
+                        raw_image_ = preprocess_raw_image(raw_image, encoder_type)
                         z = encoder.forward_features(raw_image_)
                         if 'mocov3' in encoder_type: z = z[:, 1:]
                         if 'dinov2' in encoder_type or 'meddinov3' in encoder_type:
                             z = z['x_norm_patchtokens']
                         zs.append(z)
 
-            if args.legacy:
-                drop_ids = torch.rand(y_target.shape[0], device=y_target.device) < args.cfg_prob
-                labels = torch.where(drop_ids, args.num_classes, y_target)
-            else:
-                labels = y_target
-
             with accelerator.accumulate(model):
                 model_kwargs = dict(y=labels)
-                loss, proj_loss = loss_fn(model, x_target, model_kwargs, zs=zs, x_source=x_source)
+                loss, proj_loss = loss_fn(model, x, model_kwargs, zs=zs)
                 loss_mean = loss.mean()
                 proj_loss_mean = proj_loss.mean()
                 loss = loss_mean + proj_loss_mean * args.proj_coeff
@@ -390,11 +354,7 @@ def main(args):
                     torch.save(checkpoint, checkpoint_path)
                     logger.info(f"Saved checkpoint to {checkpoint_path}")
 
-            # Skipped under --cond-x1: this grid uses euler_sampler starting from pure noise
-            # (no source/x1 latent available to condition on), which the model can't accept
-            # once it's built with cond_channels > 0. Disabled by default anyway via
-            # --sampling-steps 99999999 in bash_files/train.sh.
-            if (global_step % args.sampling_steps == 0 and global_step > 0 and not args.cond_x1):
+            if (global_step % args.sampling_steps == 0 and global_step > 0):
                 from samplers import euler_sampler
                 with torch.no_grad():
                     samples = euler_sampler(
@@ -495,18 +455,6 @@ def parse_args(input_args=None):
                         help="Path to a larger SiT checkpoint for weight-selection initialization")
     parser.add_argument("--proj-coeff", type=float, default=0.5)
     parser.add_argument("--weighting", default="uniform", type=str, help="Max gradient norm.")
-    parser.add_argument("--beta-max", type=float, default=0.3,
-                        help="I2SB bridge width: controls noise added during training (symmetric schedule). "
-                             "0.3 matches official I2SB's default (our sigma_sq_total = beta_max*2/3 gives an "
-                             "equivalent total-variance scale to their discretized schedule) — still worth "
-                             "sweeping per-dataset.")
-    parser.add_argument("--cond-x1", action=argparse.BooleanOptionalAction, default=False,
-                        help="Concatenate the source (Healthy) latent as extra input channels to the network, "
-                             "matching official I2SB's --cond-x1. Without this the model only ever sees the "
-                             "noisy bridge sample Xt, not the specific source image it should be editing.")
-    parser.add_argument("--ot-ode", action=argparse.BooleanOptionalAction, default=False,
-                        help="Deterministic bridge (no stochastic noise in q_sample), matching official I2SB's "
-                             "--ot-ode. Must match between training and generation.")
     parser.add_argument("--legacy", action=argparse.BooleanOptionalAction, default=False)
 
     if input_args is not None:
