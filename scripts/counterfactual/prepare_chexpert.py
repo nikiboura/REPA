@@ -18,18 +18,18 @@ Usage:
         --resolution    256
 
 Labels:
-    0           = healthy  (No Finding == 1.0)
+    0           = healthy  (No Finding == 1.0, regardless of any other column)
     1 .. N      = each pathology passed via --pathologies, in order
 
-Only rows where exactly ONE target pathology is positive (== 1.0) and no
-other disease column is positive are kept (Support Devices is ignored).
-Only frontal views are kept.
+A pathology row only keeps a label when it is positive and every other
+disease column is negative (Support Devices is ignored, it isn't a
+disease). Ambiguous/co-morbid pathology rows are dropped. Only frontal
+views are kept. Classes are downsampled to equal size.
 """
 
 import argparse
 import json
 import os
-import random
 import shutil
 import subprocess
 
@@ -41,14 +41,10 @@ from PIL import Image
 from torchvision import transforms
 from tqdm import tqdm
 
-# Columns that are never treated as co-diseases
-NON_DISEASE_COLS = {'No Finding', 'Support Devices'}
-
-ALL_DISEASE_COLS = [
+DISEASE_COLS = [
     'Enlarged Cardiomediastinum', 'Cardiomegaly', 'Lung Opacity',
     'Lung Lesion', 'Edema', 'Consolidation', 'Pneumonia', 'Atelectasis',
     'Pneumothorax', 'Pleural Effusion', 'Pleural Other', 'Fracture',
-    'No Finding',
 ]
 
 
@@ -68,22 +64,52 @@ def encode_batch(vae, imgs, device):
     return moments.cpu().numpy().astype(np.float32)
 
 
-def _get_label(row, pathologies, co_disease_cols_per_pathology):
+def build_labels(df, pathologies):
     """
-    Returns integer label or None (skip).
-      0        = healthy (No Finding == 1.0)
-      1..N     = pathology index in `pathologies`
-    A disease row qualifies only when exactly the target pathology is 1.0
-    and every other real-disease column is NOT 1.0.
+    Vectorized version of the row-by-row purity filter.
+      0    = healthy — No Finding == 1.0, unconditionally, no other column checked.
+      i    = pathologies[i-1] — positive AND every other disease column negative.
+      NaN  = neither condition met -> row is dropped.
+    Healthy is resolved first and wins outright, exactly like the original
+    early-return; pathologies then only fill in rows still unlabeled.
     """
-    if row.get('No Finding', float('nan')) == 1.0:
-        return 0
+    disease_cols = [c for c in DISEASE_COLS if c in df.columns]
+    label = pd.Series(np.nan, index=df.index)
+
+    if 'No Finding' in df.columns:
+        label[df['No Finding'] == 1.0] = 0
+
     for i, path in enumerate(pathologies, start=1):
-        if row.get(path, float('nan')) == 1.0:
-            others = co_disease_cols_per_pathology[i - 1]
-            if not any(row.get(c, float('nan')) == 1.0 for c in others):
-                return i
-    return None
+        if path not in df.columns:
+            continue
+        others = [c for c in disease_cols if c != path]
+        pure = (df[path] == 1.0) & (df[others] != 1.0).all(axis=1)
+        label[label.isna() & pure] = i
+
+    return label
+
+
+def balance_classes(df, seed=42):
+    """Downsample every class to the size of the rarest one, then shuffle."""
+    min_count = df['label'].value_counts().min()
+    balanced = df.groupby('label', group_keys=False).apply(
+        lambda g: g.sample(n=min_count, random_state=seed)
+    )
+    return balanced.sample(frac=1, random_state=seed).reset_index(drop=True)
+
+
+def _load_resized(path, resize):
+    try:
+        return resize(Image.open(path).convert('RGB'))
+    except Exception:
+        return None
+
+
+def _print_class_counts(df, label_names):
+    counts = df['label'].value_counts().reindex(range(len(label_names)), fill_value=0)
+    for idx, name in enumerate(label_names):
+        print(f'  {idx} ({name}): {counts[idx]}')
+    print(f'  Total: {counts.sum()}')
 
 
 def process_split(csv_path, chexpert_root, out_dir, split, resolution,
@@ -97,96 +123,59 @@ def process_split(csv_path, chexpert_root, out_dir, split, resolution,
 
     # keep frontal views only
     if 'Frontal/Lateral' in df.columns:
-        df = df[df['Frontal/Lateral'] == 'Frontal'].reset_index(drop=True)
+        df = df[df['Frontal/Lateral'] == 'Frontal']
+    if max_samples is not None:
+        df = df.head(max_samples)
 
-    # For each target pathology, build the set of columns that disqualify a row
-    # (all real-disease cols present in the CSV, minus the target and NON_DISEASE_COLS)
-    co_disease_cols_per_pathology = []
-    for path in pathologies:
-        excluded = NON_DISEASE_COLS | {path}
-        cols = [c for c in ALL_DISEASE_COLS if c not in excluded and c in df.columns]
-        co_disease_cols_per_pathology.append(cols)
+    df['label'] = build_labels(df, pathologies)
+    df = df.dropna(subset=['label'])
+    df['label'] = df['label'].astype(int)
 
-    # collect valid (path, label) pairs
-    entries = []
-    class_counts = {0: 0}
-    for i in range(1, len(pathologies) + 1):
-        class_counts[i] = 0
-
-    limit = max_samples if max_samples is not None else len(df)
-    for i in range(min(limit, len(df))):
-        row = df.iloc[i]
-        label = _get_label(row, pathologies, co_disease_cols_per_pathology)
-        if label is None:
-            continue
-        img_rel = row['Path'].replace('\\', '/')
-        parts = img_rel.split('/', 1)
-        img_rel = parts[1] if len(parts) > 1 else parts[0]
-        img_path = os.path.join(chexpert_root, img_rel)
-        if not os.path.isfile(img_path):
-            continue
-        entries.append((img_path, label))
-        class_counts[label] += 1
+    # resolve image path (strip leading "CheXpert-v1.0-small/" folder component)
+    # and drop rows whose file isn't actually on disk
+    rel_path = df['Path'].str.replace('\\', '/', regex=False).str.split('/', n=1).str[-1]
+    df['image_path'] = rel_path.apply(lambda p: os.path.join(chexpert_root, p))
+    df = df[df['image_path'].apply(os.path.isfile)]
 
     label_names = ['Healthy'] + list(pathologies)
     print(f'\n[{split}] class distribution before balancing:')
-    for idx, name in enumerate(label_names):
-        print(f'  {idx} ({name}): {class_counts[idx]}')
-    print(f'  Total: {sum(class_counts.values())}')
+    _print_class_counts(df, label_names)
 
-    # Balance classes: keep exactly min(count_per_class) samples from each class
-    entries_by_class = {}
-    for img_path, label in entries:
-        entries_by_class.setdefault(label, []).append((img_path, label))
-    min_count = min(len(v) for v in entries_by_class.values())
-    balanced = []
-    for cls_idx in sorted(entries_by_class.keys()):
-        cls_entries = entries_by_class[cls_idx]
-        random.Random(42).shuffle(cls_entries)
-        balanced.extend(cls_entries[:min_count])
-    random.Random(42).shuffle(balanced)
-    entries = balanced
+    df = balance_classes(df[['image_path', 'label']])
 
-    print(f'\n[{split}] class distribution after balancing ({min_count} per class):')
-    for idx, name in enumerate(label_names):
-        print(f'  {idx} ({name}): {min_count}')
-    print(f'  Total: {len(entries)}')
+    print(f'\n[{split}] class distribution after balancing:')
+    _print_class_counts(df, label_names)
 
-    resize_norm = transforms.Compose([
-        transforms.Resize((resolution, resolution),
-                          interpolation=transforms.InterpolationMode.BICUBIC),
+    resize = transforms.Resize((resolution, resolution),
+                               interpolation=transforms.InterpolationMode.BICUBIC)
+    to_tensor = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize([0.5] * 3, [0.5] * 3),
     ])
-    resize_pil = transforms.Resize(
-        (resolution, resolution),
-        interpolation=transforms.InterpolationMode.BICUBIC
-    )
 
     labels_meta = []
-    for start in tqdm(range(0, len(entries), batch_size), desc=split):
-        batch = entries[start:start + batch_size]
-        imgs_pil, imgs_tensor, valid_labels = [], [], []
-        for img_path, label in batch:
-            try:
-                img = Image.open(img_path).convert('RGB')
-                imgs_pil.append(img)
-                imgs_tensor.append(resize_norm(img))
-                valid_labels.append(label)
-            except Exception:
+    rows = df.to_dict('records')
+    for start in tqdm(range(0, len(rows), batch_size), desc=split):
+        batch = rows[start:start + batch_size]
+        imgs, labels = [], []
+        for row in batch:
+            img = _load_resized(row['image_path'], resize)
+            if img is None:
                 continue
+            imgs.append(img)
+            labels.append(row['label'])
 
-        if not imgs_tensor:
+        if not imgs:
             continue
 
-        moments = encode_batch(vae, torch.stack(imgs_tensor), device)
+        tensors = torch.stack([to_tensor(img) for img in imgs])
+        moments = encode_batch(vae, tensors, device)
 
-        for k, (img_pil, label) in enumerate(zip(imgs_pil, valid_labels)):
+        for img, label, moment in zip(imgs, labels, moments):
             idx = len(labels_meta)
-            resize_pil(img_pil).save(os.path.join(images_dir, f'{idx}.png'))
-            npy_fname = f'{idx}.npy'
-            np.save(os.path.join(features_dir, npy_fname), moments[k])
-            labels_meta.append([npy_fname, label])
+            img.save(os.path.join(images_dir, f'{idx}.png'))
+            np.save(os.path.join(features_dir, f'{idx}.npy'), moment)
+            labels_meta.append([f'{idx}.npy', label])
 
     with open(os.path.join(features_dir, 'dataset.json'), 'w') as f:
         json.dump({'labels': labels_meta}, f)
