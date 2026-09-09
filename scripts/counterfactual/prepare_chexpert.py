@@ -239,12 +239,6 @@ def main():
         args.resolution, vae, device, args.batch_size,
         args.pathologies, args.max_samples,
     )
-    process_split(
-        os.path.join(args.chexpert_root, 'valid.csv'),
-        args.chexpert_root, args.out_dir, 'val',
-        args.resolution, vae, device, args.batch_size,
-        args.pathologies, max_samples=None,
-    )
 
 
 if __name__ == '__main__':
