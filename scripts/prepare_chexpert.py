@@ -180,11 +180,6 @@ def main():
         args.chexpert_root, args.out_dir, 'train',
         args.resolution, vae, device, args.batch_size, args.max_samples
     )
-    process_split(
-        os.path.join(args.chexpert_root, 'valid.csv'),
-        args.chexpert_root, args.out_dir, 'val',
-        args.resolution, vae, device, args.batch_size, max_samples=None
-    )
 
 
 if __name__ == '__main__':
