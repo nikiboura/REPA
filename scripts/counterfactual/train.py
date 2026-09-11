@@ -3,6 +3,7 @@ import copy
 from copy import deepcopy
 import logging
 import os
+import random
 import sys
 from pathlib import Path
 from collections import OrderedDict
@@ -18,7 +19,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from tqdm.auto import tqdm
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Sampler
 from scipy.optimize import linear_sum_assignment
 
 from accelerate import Accelerator
@@ -122,6 +123,34 @@ def requires_grad(model, flag=True):
     """
     for p in model.parameters():
         p.requires_grad = flag
+
+
+class BalancedPairSampler(Sampler):
+    """
+    Yields batches with an equal number of Healthy (label 0) and PE (label 1)
+    samples, so the I2SB OT pairing in the training loop always has n0 == n1
+    and every image in the batch gets matched — no leftovers dropped.
+    """
+
+    def __init__(self, labels, batch_size):
+        assert batch_size % 2 == 0, "batch_size must be even for a balanced split"
+        self.half = batch_size // 2
+        self.idx0 = [i for i, l in enumerate(labels) if l == 0]
+        self.idx1 = [i for i, l in enumerate(labels) if l == 1]
+
+    def __iter__(self):
+        idx0, idx1 = self.idx0.copy(), self.idx1.copy()
+        random.shuffle(idx0)
+        random.shuffle(idx1)
+        n_batches = min(len(idx0), len(idx1)) // self.half
+        for b in range(n_batches):
+            batch = idx0[b * self.half:(b + 1) * self.half] + \
+                    idx1[b * self.half:(b + 1) * self.half]
+            random.shuffle(batch)
+            yield batch
+
+    def __len__(self):
+        return min(len(self.idx0), len(self.idx1)) // self.half
 
 
 #################################################################################
@@ -241,13 +270,13 @@ def main(args):
     # Setup data:
     train_dataset = LatentDataset(args.data_dir, split='train')
     local_batch_size = int(args.batch_size // accelerator.num_processes)
+    train_labels = [label for _, label in train_dataset.entries]
+    train_sampler = BalancedPairSampler(train_labels, local_batch_size)
     train_dataloader = DataLoader(
         train_dataset,
-        batch_size=local_batch_size,
-        shuffle=True,
+        batch_sampler=train_sampler,
         num_workers=args.num_workers,
         pin_memory=True,
-        drop_last=True
     )
     if accelerator.is_main_process:
         logger.info(f"Dataset contains {len(train_dataset):,} images ({args.data_dir})")
