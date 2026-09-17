@@ -1,24 +1,7 @@
 """
 compute_metrics.py
 -------------------
-Evaluation metrics for I2SB counterfactual generation (Healthy -> PE).
-
-Counterfactual generation has no paired ground truth -- there is no real
-"this patient, but with PE" image to compare against -- so reference-based
-metrics like SSIM/LPIPS/PSNR don't apply. Instead this computes the same
-family of metrics used to validate synthetic/counterfactual medical images
-in the literature:
-
-  FID / KID : distributional similarity between generated PE images and
-              real PE images (clean-fid, same library used in
-              run/model_ablations/compute_metrics.sh).
-  AUC       : trains a small Healthy-vs-PE classifier on real VAE latents,
-              then checks whether it scores the generated PE images as
-              diseased -- a proxy for "do these carry real diagnostic
-              signal, not just visual plausibility." This is the
-              "classifier recognizes synthetic images as diseased" check,
-              not the fuller "augment training set and retrain" AUC some
-              papers report.
+Evaluation metrics.
 
 Usage:
     python compute_metrics.py \
@@ -35,6 +18,7 @@ import tempfile
 import numpy as np
 import torch
 import torch.nn as nn
+import wandb
 from PIL import Image
 from torchvision import transforms
 
@@ -130,10 +114,16 @@ def main():
     parser.add_argument('--batch-size', type=int, default=32)
     parser.add_argument('--val-frac', type=float, default=0.15)
     parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--report-to', type=str, default='none', choices=['none', 'wandb'])
+    parser.add_argument('--wandb-project', type=str, default='REPA')
+    parser.add_argument('--wandb-name', type=str, default=None)
     args = parser.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     torch.manual_seed(args.seed)
+
+    if args.report_to == 'wandb':
+        wandb.init(project=args.wandb_project, name=args.wandb_name, config=vars(args))
 
     tmp_root = tempfile.mkdtemp(prefix='cf_metrics_')
     try:
@@ -225,8 +215,18 @@ def main():
         print(f'{"AUC (real Healthy vs generated PE)":<45} {generated_auc:.4f}')
         print('=' * 60)
 
+        if args.report_to == 'wandb':
+            wandb.log({
+                'fid_generated_vs_real_pe': fid_score,
+                'kid_generated_vs_real_pe': kid_score,
+                'auc_real_holdout': real_auc,
+                'auc_real_healthy_vs_generated_pe': generated_auc,
+            })
+
     finally:
         shutil.rmtree(tmp_root, ignore_errors=True)
+        if args.report_to == 'wandb':
+            wandb.finish()
 
 
 if __name__ == '__main__':
