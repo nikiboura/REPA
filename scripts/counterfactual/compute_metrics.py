@@ -27,6 +27,14 @@ from dataset import LatentDataset
 
 from cleanfid import fid
 from diffusers.models import AutoencoderKL
+from skimage.metrics import structural_similarity as ssim_metric
+from skimage.metrics import peak_signal_noise_ratio as psnr_metric
+
+try:
+    import lpips
+    HAS_LPIPS = True
+except ImportError:
+    HAS_LPIPS = False
 
 
 def build_real_class_dir(data_dir, split, label, tmp_root):
@@ -102,6 +110,42 @@ def latent_means(dataset, indices):
         xs.append(mean)
         ys.append(label.item())
     return torch.stack(xs), torch.tensor(ys, dtype=torch.float32)
+
+
+def compute_pair_similarity(generated_dir, resolution, device):
+    """SSIM/PSNR/LPIPS between each {stem}_healthy.png and {stem}_pe.png pair."""
+    stems = sorted(
+        fname[:-len('_healthy.png')] for fname in os.listdir(generated_dir)
+        if fname.endswith('_healthy.png')
+        and os.path.isfile(os.path.join(generated_dir, fname[:-len('_healthy.png')] + '_pe.png'))
+    )
+
+    lpips_fn = lpips.LPIPS(net='alex').to(device).eval() if HAS_LPIPS else None
+    if lpips_fn is None:
+        print('  [warning] lpips not installed (`pip install lpips`) -- skipping LPIPS.')
+
+    ssim_scores, psnr_scores, lpips_scores = [], [], []
+    for stem in stems:
+        healthy = np.array(
+            Image.open(os.path.join(generated_dir, f'{stem}_healthy.png')).convert('RGB').resize((resolution, resolution))
+        )
+        pe = np.array(
+            Image.open(os.path.join(generated_dir, f'{stem}_pe.png')).convert('RGB').resize((resolution, resolution))
+        )
+        ssim_scores.append(ssim_metric(healthy, pe, channel_axis=-1, data_range=255))
+        psnr_scores.append(psnr_metric(healthy, pe, data_range=255))
+        if lpips_fn is not None:
+            h_t = torch.from_numpy(healthy).permute(2, 0, 1).float().div(127.5).sub(1).unsqueeze(0).to(device)
+            p_t = torch.from_numpy(pe).permute(2, 0, 1).float().div(127.5).sub(1).unsqueeze(0).to(device)
+            with torch.no_grad():
+                lpips_scores.append(lpips_fn(h_t, p_t).item())
+
+    return {
+        'n_pairs': len(stems),
+        'ssim': float(np.mean(ssim_scores)) if ssim_scores else float('nan'),
+        'psnr': float(np.mean(psnr_scores)) if psnr_scores else float('nan'),
+        'lpips': float(np.mean(lpips_scores)) if lpips_scores else float('nan'),
+    }
 
 
 def main():
@@ -205,22 +249,27 @@ def main():
             eval_scores = torch.sigmoid(clf(eval_X)).cpu().numpy()
         generated_auc = compute_auc(eval_scores, eval_y)
 
+        # ---- Pair similarity: Healthy source vs its generated PE counterfactual ----
+        print('\nComputing Healthy vs generated-PE pair similarity...')
+        pair_metrics = compute_pair_similarity(args.generated_dir, args.resolution, device)
+
         # ---- Report ----
-        print('\n' + '=' * 60)
-        print('COUNTERFACTUAL GENERATION METRICS')
-        print('=' * 60)
-        print(f'{"FID (generated PE vs real PE)":<45} {fid_score:.4f}')
-        print(f'{"KID (generated PE vs real PE)":<45} {kid_score:.6f}')
-        print(f'{"AUC (classifier, real held-out sanity check)":<45} {real_auc:.4f}')
-        print(f'{"AUC (real Healthy vs generated PE)":<45} {generated_auc:.4f}')
-        print('=' * 60)
+        print()
+        print('FID:', fid_score)
+        print('KID:', kid_score)
+        print('AUC:', generated_auc)
+        print('SSIM (healthy vs counterfactual):', pair_metrics['ssim'])
+        print('PSNR (healthy vs counterfactual):', pair_metrics['psnr'])
+        print('LPIPS (healthy vs counterfactual):', pair_metrics['lpips'])
 
         if args.report_to == 'wandb':
             wandb.log({
-                'fid_generated_vs_real_pe': fid_score,
-                'kid_generated_vs_real_pe': kid_score,
-                'auc_real_holdout': real_auc,
-                'auc_real_healthy_vs_generated_pe': generated_auc,
+                'fid': fid_score,
+                'kid': kid_score,
+                'auc': generated_auc,
+                'ssim': pair_metrics['ssim'],
+                'psnr': pair_metrics['psnr'],
+                'lpips': pair_metrics['lpips'],
             })
 
     finally:

@@ -17,6 +17,7 @@ Pillow
 pandas
 kaggle
 clean-fid
+lpips
 scipy>=1.13
 scikit-image
 SimpleITK
