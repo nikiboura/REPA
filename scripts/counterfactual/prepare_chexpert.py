@@ -66,12 +66,9 @@ def encode_batch(vae, imgs, device):
 
 def build_labels(df, pathologies):
     """
-    Vectorized version of the row-by-row purity filter.
-      0    = healthy — No Finding == 1.0, unconditionally, no other column checked.
+      0    = healthy, No Finding == 1.0, unconditionally, no other column checked.
       i    = pathologies[i-1] — positive AND every other disease column negative.
-      NaN  = neither condition met -> row is dropped.
-    Healthy is resolved first and wins outright, exactly like the original
-    early-return; pathologies then only fill in rows still unlabeled.
+      NaN  = neither condition met row is dropped
     """
     disease_cols = [c for c in DISEASE_COLS if c in df.columns]
     label = pd.Series(np.nan, index=df.index)
@@ -90,7 +87,7 @@ def build_labels(df, pathologies):
 
 
 def balance_classes(df, seed=42):
-    """Downsample every class to the size of the rarest one, then shuffle."""
+    """Downsample every class to the size of the rarest one, then shuffle using frac=1."""
     min_count = df['label'].value_counts().min()
     balanced = df.groupby('label', group_keys=False).apply(
         lambda g: g.sample(n=min_count, random_state=seed)
@@ -181,6 +178,7 @@ def process_split(csv_path, chexpert_root, out_dir, split, resolution,
         json.dump({'labels': labels_meta}, f)
 
     print(f'[{split}] saved {len(labels_meta)} images and VAE latents to {out_dir}')
+    return len(labels_meta)
 
 
 def download_chexpert(chexpert_root, kaggle_json=None):
@@ -233,12 +231,23 @@ def main():
     print('Loading VAE...')
     vae = load_vae(args.vae_type, device)
 
-    process_split(
+    n_train = process_split(
         os.path.join(args.chexpert_root, 'train.csv'),
         args.chexpert_root, args.out_dir, 'train',
         args.resolution, vae, device, args.batch_size,
         args.pathologies, args.max_samples,
     )
+    n_test = process_split(
+        os.path.join(args.chexpert_root, 'valid.csv'),
+        args.chexpert_root, args.out_dir, 'test',
+        args.resolution, vae, device, args.batch_size,
+        args.pathologies, max_samples=None,
+    )
+
+    print(f'\n=== Dataset summary ===')
+    print(f'  Training samples: {n_train}')
+    print(f'  Testing samples:  {n_test}')
+    print(f'  Total:            {n_train + n_test}')
 
 
 if __name__ == '__main__':
