@@ -89,9 +89,11 @@ def build_labels(df, pathologies):
 def balance_classes(df, seed=42):
     """Downsample every class to the size of the rarest one, then shuffle using frac=1."""
     min_count = df['label'].value_counts().min()
-    balanced = df.groupby('label', group_keys=False).apply(
-        lambda g: g.sample(n=min_count, random_state=seed)
-    )
+    # GroupBy.sample() (not .apply(lambda g: g.sample(...))) -- recent pandas versions
+    # changed .apply()'s default to drop the grouping column from what the lambda sees,
+    # which silently stripped 'label' out of the result. .sample() isn't routed through
+    # .apply() so it isn't affected by that behavior change.
+    balanced = df.groupby('label', group_keys=False).sample(n=min_count, random_state=seed)
     return balanced.sample(frac=1, random_state=seed).reset_index(drop=True)
 
 
