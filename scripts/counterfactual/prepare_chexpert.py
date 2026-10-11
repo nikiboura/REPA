@@ -86,6 +86,32 @@ def build_labels(df, pathologies):
     return label
 
 
+PATIENT_RE = r'(patient\d+)'
+
+
+def split_held_out_patients(df, pathologies):
+    """
+    Hold out every patient who has BOTH a pure-Healthy and a pure-pathology
+    image into a test split; everyone else stays in train.
+
+    These patients give a genuine ground-truth comparison (their own real
+    Healthy image vs their own real pathology image) & generating a counterfactual from their Healthy image can
+    be compared against what they actually looked like, not just against
+    population realism.
+    """
+    labeled = df.assign(label=build_labels(df, pathologies)).dropna(subset=['label'])
+    labeled = labeled.assign(patient=labeled['Path'].str.extract(PATIENT_RE)[0])
+
+    patient_labels = labeled.groupby('patient')['label'].apply(set)
+    held_out_patients = set(
+        patient_labels[patient_labels.apply(lambda s: {0, 1}.issubset(s))].index
+    )
+
+    patient_id = df['Path'].str.extract(PATIENT_RE)[0]
+    is_test = patient_id.isin(held_out_patients)
+    return df[~is_test], df[is_test], held_out_patients
+
+
 def balance_classes(df, seed=42):
     """Downsample every class to the size of the rarest one, then shuffle using frac=1."""
     min_count = df['label'].value_counts().min()
@@ -111,18 +137,14 @@ def _print_class_counts(df, label_names):
     print(f'  Total: {counts.sum()}')
 
 
-def process_split(csv_path, chexpert_root, out_dir, split, resolution,
+def process_split(df, chexpert_root, out_dir, split, resolution,
                   vae, device, batch_size, pathologies, max_samples=None):
     images_dir = os.path.join(out_dir, 'images', split)
     features_dir = os.path.join(out_dir, 'vae-sd', split)
     os.makedirs(images_dir, exist_ok=True)
     os.makedirs(features_dir, exist_ok=True)
 
-    df = pd.read_csv(csv_path)
-
-    # keep frontal views only
-    if 'Frontal/Lateral' in df.columns:
-        df = df[df['Frontal/Lateral'] == 'Frontal']
+    df = df.copy()
     if max_samples is not None:
         df = df.head(max_samples)
 
@@ -233,15 +255,21 @@ def main():
     print('Loading VAE...')
     vae = load_vae(args.vae_type, device)
 
+    df = pd.read_csv(os.path.join(args.chexpert_root, 'train.csv'))
+    if 'Frontal/Lateral' in df.columns:
+        df = df[df['Frontal/Lateral'] == 'Frontal']
+
+    train_df, test_df, held_out_patients = split_held_out_patients(df, args.pathologies)
+    print(f'\nHeld out {len(held_out_patients)} patients (have both a pure-Healthy and '
+          f'pure-pathology image) for testing -- removed from training entirely.')
+
     n_train = process_split(
-        os.path.join(args.chexpert_root, 'train.csv'),
-        args.chexpert_root, args.out_dir, 'train',
+        train_df, args.chexpert_root, args.out_dir, 'train',
         args.resolution, vae, device, args.batch_size,
         args.pathologies, args.max_samples,
     )
     n_test = process_split(
-        os.path.join(args.chexpert_root, 'valid.csv'),
-        args.chexpert_root, args.out_dir, 'test',
+        test_df, args.chexpert_root, args.out_dir, 'test',
         args.resolution, vae, device, args.batch_size,
         args.pathologies, max_samples=None,
     )
