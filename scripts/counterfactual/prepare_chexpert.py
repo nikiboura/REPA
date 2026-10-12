@@ -10,12 +10,14 @@ Output:
     <out_dir>/vae-sd/<split>/dataset.json     – {"labels": [["<idx>.npy", cls],...]}
 
 Usage:
-    python prepare_chexpert.py \
-        --chexpert-root /content/chexpert \
-        --out-dir       /content/data/chexpert_256 \
-        --vae-type      sd \
-        --pathologies   "Pleural Effusion" "Cardiomegaly" \
-        --resolution    256
+python /content/REPA/scripts/counterfactual/prepare_chexpert.py \
+      --chexpert-root /content/chexpert \
+      --out-dir /content/data/chexpert_256_sdvae \
+      --resolution 256 \
+      --pathologies "Pleural Effusion" \
+      --vae-type sd \
+      --test-size 500
+
 
 Labels:
     0           = healthy  (No Finding == 1.0, regardless of any other column)
@@ -23,8 +25,7 @@ Labels:
 
 A pathology row only keeps a label when it is positive and every other
 disease column is negative (Support Devices is ignored, it isn't a
-disease). Ambiguous/co-morbid pathology rows are dropped. Only frontal
-views are kept. Classes are downsampled to equal size.
+disease). Classes are downsampled to equal size.
 """
 
 import argparse
@@ -86,39 +87,31 @@ def build_labels(df, pathologies):
     return label
 
 
-PATIENT_RE = r'(patient\d+)'
-
-
-def split_held_out_patients(df, pathologies):
+def split_test_rows(df, pathologies, n_test=500, seed=42):
     """
-    Hold out every patient who has BOTH a pure-Healthy and a pure-pathology
-    image into a test split; everyone else stays in train.
+    Build a test split: for each label (Healthy and every pathology),
+    randomly sample exactly n_test rows (or every available row, if fewer
+    than n_test exist for that label). Everything not sampled stays in train.
 
-    These patients give a genuine ground-truth comparison (their own real
-    Healthy image vs their own real pathology image) & generating a counterfactual from their Healthy image can
-    be compared against what they actually looked like, not just against
-    population realism.
+    Both returned dataframes are already labeled (via build_labels) and
+    filtered (NaN/co-morbid/uncertain rows dropped) -- process_split() uses
+    the label column as-is rather than recomputing it.
     """
     labeled = df.assign(label=build_labels(df, pathologies)).dropna(subset=['label'])
-    labeled = labeled.assign(patient=labeled['Path'].str.extract(PATIENT_RE)[0])
 
-    patient_labels = labeled.groupby('patient')['label'].apply(set)
-    held_out_patients = set(
-        patient_labels[patient_labels.apply(lambda s: {0, 1}.issubset(s))].index
-    )
+    test_parts = []
+    for label in range(len(pathologies) + 1):  # 0 = Healthy, 1..N = pathologies
+        pool = labeled[labeled['label'] == label]
+        test_parts.append(pool.sample(n=min(n_test, len(pool)), random_state=seed))
 
-    patient_id = df['Path'].str.extract(PATIENT_RE)[0]
-    is_test = patient_id.isin(held_out_patients)
-    return df[~is_test], df[is_test], held_out_patients
+    test_df = pd.concat(test_parts)
+    train_df = labeled.drop(index=test_df.index)
+    return train_df, test_df
 
 
 def balance_classes(df, seed=42):
     """Downsample every class to the size of the rarest one, then shuffle using frac=1."""
     min_count = df['label'].value_counts().min()
-    # GroupBy.sample() (not .apply(lambda g: g.sample(...))) -- recent pandas versions
-    # changed .apply()'s default to drop the grouping column from what the lambda sees,
-    # which silently stripped 'label' out of the result. .sample() isn't routed through
-    # .apply() so it isn't affected by that behavior change.
     balanced = df.groupby('label', group_keys=False).sample(n=min_count, random_state=seed)
     return balanced.sample(frac=1, random_state=seed).reset_index(drop=True)
 
@@ -148,8 +141,6 @@ def process_split(df, chexpert_root, out_dir, split, resolution,
     if max_samples is not None:
         df = df.head(max_samples)
 
-    df['label'] = build_labels(df, pathologies)
-    df = df.dropna(subset=['label'])
     df['label'] = df['label'].astype(int)
 
     # resolve image path (strip leading "CheXpert-v1.0-small/" folder component)
@@ -229,7 +220,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out-dir', type=str, default='./data/chexpert_256')
     parser.add_argument('--chexpert-root', type=str, required=True,
-                        help='Path to CheXpert-v1.0-small/ (contains train.csv, valid.csv)')
+                        help='Path to CheXpert-v1.0-small/ (contains train.csv)')
     parser.add_argument('--kaggle-json', type=str, default=None)
     parser.add_argument('--resolution', type=int, default=256)
     parser.add_argument('--batch-size', type=int, default=32)
@@ -240,6 +231,9 @@ def main():
                         default=['Pleural Effusion'],
                         help='Target pathology names (single-label rows only). '
                              'E.g. --pathologies "Pleural Effusion" "Cardiomegaly"')
+    parser.add_argument('--test-size', type=int, default=500,
+                        help='Number of rows to sample per label (Healthy and each pathology) '
+                             'for the test split.')
     args = parser.parse_args()
 
     download_chexpert(args.chexpert_root, args.kaggle_json)
@@ -259,9 +253,8 @@ def main():
     if 'Frontal/Lateral' in df.columns:
         df = df[df['Frontal/Lateral'] == 'Frontal']
 
-    train_df, test_df, held_out_patients = split_held_out_patients(df, args.pathologies)
-    print(f'\nHeld out {len(held_out_patients)} patients (have both a pure-Healthy and '
-          f'pure-pathology image) for testing -- removed from training entirely.')
+    train_df, test_df = split_test_rows(df, args.pathologies, n_test=args.test_size)
+    print(f'\nSampled up to {args.test_size} rows per label for testing -- removed from training.')
 
     n_train = process_split(
         train_df, args.chexpert_root, args.out_dir, 'train',
