@@ -178,12 +178,19 @@ def main():
         assert n_real_pe > 0, f'No PE images found in {args.data_dir} split={args.split}'
         assert n_gen_pe > 0, f'No *_pe.png files found in {args.generated_dir}'
 
+        # Cache the real-PE reference stats (same data-dir/split reused across baseline/
+        # condx1/condx1-otode runs) instead of recomputing them from real_pe_dir every time.
+        stats_name = f"{os.path.basename(args.data_dir.rstrip('/'))}_{args.split}_pe"
+        for mode in ('clean', 'legacy_pytorch'):
+            if not fid.test_stats_exists(stats_name, mode=mode):
+                fid.make_custom_stats(name=stats_name, fdir=real_pe_dir, mode=mode, batch_size=args.batch_size, device=device)
+
         print('\nComputing FID (clean)...')
-        fid_score = fid.compute_fid(fdir1=gen_pe_dir, fdir2=real_pe_dir, mode='clean', device=device)
+        fid_score = fid.compute_fid(fdir1=gen_pe_dir, dataset_name=stats_name, dataset_split='custom', mode='clean', device=device)
         print('Computing FID (standard, legacy_pytorch -- matches the original pytorch-fid implementation)...')
-        fid_score_standard = fid.compute_fid(fdir1=gen_pe_dir, fdir2=real_pe_dir, mode='legacy_pytorch', device=device)
+        fid_score_standard = fid.compute_fid(fdir1=gen_pe_dir, dataset_name=stats_name, dataset_split='custom', mode='legacy_pytorch', device=device)
         print('Computing KID...')
-        kid_score = fid.compute_kid(fdir1=gen_pe_dir, fdir2=real_pe_dir, mode='clean', device=device)
+        kid_score = fid.compute_kid(fdir1=gen_pe_dir, dataset_name=stats_name, dataset_split='custom', mode='clean', device=device)
 
         #AUC: train a Healthy-vs-PE classifier on real latents
         print('\nTraining pathology classifier on real latents...')
