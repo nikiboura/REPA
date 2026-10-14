@@ -171,19 +171,21 @@ def main():
 
     tmp_root = tempfile.mkdtemp(prefix='cf_metrics_')
     try:
-        # ---- FID / KID: generated PE vs real PE ----
+        #FID/KID: generated PE vs real PE
         real_pe_dir, n_real_pe = build_real_class_dir(args.data_dir, args.split, 1, tmp_root)
         gen_pe_dir, n_gen_pe = build_generated_pe_dir(args.generated_dir, tmp_root)
         print(f'Real PE images: {n_real_pe}, Generated PE images: {n_gen_pe}')
         assert n_real_pe > 0, f'No PE images found in {args.data_dir} split={args.split}'
         assert n_gen_pe > 0, f'No *_pe.png files found in {args.generated_dir}'
 
-        print('\nComputing FID...')
+        print('\nComputing FID (clean)...')
         fid_score = fid.compute_fid(fdir1=gen_pe_dir, fdir2=real_pe_dir, mode='clean', device=device)
+        print('Computing FID (standard, legacy_pytorch -- matches the original pytorch-fid implementation)...')
+        fid_score_standard = fid.compute_fid(fdir1=gen_pe_dir, fdir2=real_pe_dir, mode='legacy_pytorch', device=device)
         print('Computing KID...')
         kid_score = fid.compute_kid(fdir1=gen_pe_dir, fdir2=real_pe_dir, mode='clean', device=device)
 
-        # ---- AUC: train a Healthy-vs-PE classifier on real latents ----
+        #AUC: train a Healthy-vs-PE classifier on real latents
         print('\nTraining pathology classifier on real latents...')
         dataset = LatentDataset(args.data_dir, split=args.split)
         idx = np.arange(len(dataset))
@@ -220,7 +222,7 @@ def main():
             val_scores = torch.sigmoid(clf(X_val)).cpu().numpy()
         real_auc = compute_auc(val_scores, y_val.cpu().numpy())
 
-        # ---- Score generated PE images with the same classifier ----
+        #Score generated PE images with the same classifier
         print('\nEncoding generated PE images through the VAE for classifier scoring...')
         vae = AutoencoderKL.from_pretrained('stabilityai/sd-vae-ft-mse').to(device).eval()
         to_tensor = transforms.Compose([
@@ -241,7 +243,7 @@ def main():
                 gen_means.append(vae.encode(imgs).latent_dist.mean.cpu())
         gen_means = torch.cat(gen_means).to(device)
 
-        # Real Healthy held-out latents = the "known non-disease" comparison set
+        #Real Healthy held-out latents 
         real_healthy_val = X_val[y_val == 0]
         eval_X = torch.cat([real_healthy_val, gen_means])
         eval_y = np.concatenate([np.zeros(len(real_healthy_val)), np.ones(len(gen_means))])
@@ -249,13 +251,14 @@ def main():
             eval_scores = torch.sigmoid(clf(eval_X)).cpu().numpy()
         generated_auc = compute_auc(eval_scores, eval_y)
 
-        # ---- Pair similarity: Healthy source vs its generated PE counterfactual ----
+        #Pair similarity: Healthy source vs its generated PE counterfactual
         print('\nComputing Healthy vs generated-PE pair similarity...')
         pair_metrics = compute_pair_similarity(args.generated_dir, args.resolution, device)
 
-        # ---- Report ----
+        #Report
         print()
-        print('FID:', fid_score)
+        print('FID (clean):', fid_score)
+        print('FID (standard):', fid_score_standard)
         print('KID:', kid_score)
         print('AUC:', generated_auc)
         print('SSIM (healthy vs counterfactual):', pair_metrics['ssim'])
@@ -264,7 +267,8 @@ def main():
 
         if args.report_to == 'wandb':
             wandb.log({
-                'fid': fid_score,
+                'fid_clean': fid_score,
+                'fid_standard': fid_score_standard,
                 'kid': kid_score,
                 'auc': generated_auc,
                 'ssim': pair_metrics['ssim'],
