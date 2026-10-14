@@ -68,7 +68,7 @@ def encode_batch(vae, imgs, device):
 def build_labels(df, pathologies):
     """
       0    = healthy, No Finding == 1.0, unconditionally, no other column checked.
-      i    = pathologies[i-1] — positive AND every other disease column negative.
+      i    = pathologies[i-1] is positive and every other disease column negative.
       NaN  = neither condition met row is dropped
     """
     disease_cols = [c for c in DISEASE_COLS if c in df.columns]
@@ -94,8 +94,7 @@ def split_test_rows(df, pathologies, n_test=500, seed=42):
     than n_test exist for that label). Everything not sampled stays in train.
 
     Both returned dataframes are already labeled (via build_labels) and
-    filtered (NaN/co-morbid/uncertain rows dropped) -- process_split() uses
-    the label column as-is rather than recomputing it.
+    filtered (NaN/co-morbid/uncertain rows dropped).
     """
     labeled = df.assign(label=build_labels(df, pathologies)).dropna(subset=['label'])
 
