@@ -15,7 +15,7 @@ cd REPA
 ```bash
 conda create -n repa python=3.9 -y
 conda activate repa
-bash bash_files/install.sh
+bash run/install.sh
 ```
 
 ### 3. Kaggle Token
