@@ -2,95 +2,93 @@
 Vision Foundation-Guided Diffusion Models
 </h1>
 
+<b>Summary</b>: Repo is forked from https://github.com/sihyun-yu/REPA where Representation Alignment (REPA) is introduced to align noisy diffusion states with representations from pretrained visual encoders. We extend this with editing capabilities for counterfactual generation (Healthy → Pleural Effusion) on CheXpert.
 
-<b>Summary</b>: Repo is forked from https://github.com/sihyun-yu/REPA where Representation Alignment method is introduced to align noisy input states in diffusion models with representations from pretrained visual encoders. Using this method we want to extend the model with editing cababilities for counterfactual generation. The following instructions cover the preliminary experiments.
+There are two separate experiment pipelines in this repo:
+- **`run/model_ablations/`** — VAE choice × REPA ablation (does REPA help, does VAE choice matter).
+- **`run/produce_counterfactuals/`** — REPA × cond-x1 counterfactual generation (Healthy → Pleural Effusion).
+
+## Setup
 
 ### 1. Clone repo
 ```bash
 git clone https://github.com/nikiboura/REPA.git
 cd REPA
 ```
-### 1. Environment setup
+
+### 2. Environment
+```bash
+bash run/model_ablations/install.sh
+```
+(Same install script works for both pipelines.)
+
+### 3. Kaggle token
+Needed to download CheXpert and MedDINOv3 weights. Create one at https://www.kaggle.com/settings/api and note the path — you'll set it as `KAGGLE_JSON` in each `prepare_data.sh`.
+
+### 4. Teacher checkpoint
+Used for weight-selection initialization from SiT-XL/2 (https://github.com/OscarXZQ/weight-selection). Download: https://www.dl.dropboxusercontent.com/scl/fi/cxedbs4da5ugjq5wg3zrg/last.pt?rlkey=8otgrdkno0nd89po3dpwngwcc&st=apcc645o&dl=0
+
+Set this as `TEACHER_CKPT` in each `train.sh`.
+
+---
+
+## Ablations (`run/model_ablations/`)
+
+Four experiments isolating VAE choice and REPA, independently:
+
+| | VAE | REPA |
+|---|---|---|
+| A | SD | off |
+| B | MedVAE | off |
+| C | MedVAE | on |
+| D | SD | on |
 
 ```bash
-conda create -n repa python=3.9 -y
-conda activate repa
-bash bash_files/install.sh
+# 1. Prepare data (set KAGGLE_JSON first)
+bash run/model_ablations/prepare_data.sh        # 80k samples
+bash run/model_ablations/prepare_data.sh -1     # full dataset
+bash run/model_ablations/prepare_data.sh -s     # sanity check
+
+# 2. Train all four experiments (set TEACHER_CKPT first)
+bash run/model_ablations/train.sh               # SiT-S/4, 400k steps
+bash run/model_ablations/train.sh -1             # SiT-B/2, 4M steps
+bash run/model_ablations/train.sh -s             # sanity check
+
+# 3. Generate samples
+bash run/model_ablations/generate.sh
+bash run/model_ablations/generate.sh -1
+bash run/model_ablations/generate.sh -s
+
+# 4. Compute metrics (FID, Clean-FID, KID)
+bash run/model_ablations/compute_metrics.sh
 ```
 
-### 3. Kaggle Token
-A Kaggle API token is required to download the CheXpert dataset and MedDINOv3 weights during preprocessing and training. 
+---
 
-- Create from https://www.kaggle.com/settings/api and note the path.
+## Counterfactuals (`run/produce_counterfactuals/`)
 
-### 3. Download pre-trained weights from SiT/XL/2 model
-The following checkpoint is used during training to initialize weights from SiT/XL/2 model from this implementation https://github.com/OscarXZQ/weight-selection.
+Four experiments isolating REPA and `--cond-x1` (source-latent conditioning), independently, for the Healthy → Pleural Effusion bridge:
 
-- Use the following link to download it: https://www.dl.dropboxusercontent.com/scl/fi/cxedbs4da5ugjq5wg3zrg/last.pt?rlkey=8otgrdkno0nd89po3dpwngwcc&st=apcc645o&dl=0
-
-The link was retrieved from utils.py
-
-### 2. Dataset
-
-#### Dataset download & preprocessing
-  To preprocess the dataset (resize to 256×256 and encode with VAE), set your
-  `KAGGLE_JSON` path in `prepare_data.sh` and run:
-
-  ```bash
-  # 80k samples
-  bash "bash_files/prepare_data.sh"
-
-  # full dataset
-  bash "bash_files/prepare_data.sh" -1
-
-  # sanity check (10 images)
-  bash "bash_files/prepare_data.sh" -s
-  ```
-
-  This will create the following  directories:
-  - ./data/chexpert/ includes raw CheXpert images downloaded from Kaggle
-  - ./data/chexpert_256_sdvae/  preprocessed with SD VAE (Experiment A & D)
-  - ./data/chexpert_256_medvae/  preprocessed with MedVAE (Experiments B & C)
-
-### 3. Training
-Set your `TEACHER_CKPT` path in `train.sh`, then run:
-  
-```bash
-# Ablation: SiT-S/4, 400k steps
-bash "bash_files/train.sh"
-
-# Full training: SiT-B/2, 4M steps
-bash "bash_files/train.sh" -1
-
-# Sanity check (2 steps)
-bash "bash_files/train.sh" -s
-```
-This runs all three experiments sequentially:
-  - A — SiT + SD VAE (no REPA)
-  - B — SiT + MedVAE (no REPA)
-  - C — SiT + MedVAE + REPA alignment
-  - D — SiT + SD VAE + REPA alignment 
-  
-### 4. Evaluation
-Run generation for all four experiments:
-  
-```bash
-# Ablation: SiT-S/4, 400k checkpoint, 50k samples
-bash "bash_files/generate.sh"
-
-# Full: SiT-B/2, 4M checkpoint, 50k samples
-bash "bash_files/generate.sh" -1
-
-# Sanity check (4 samples)
-bash "bash_files/generate.sh" -s
-```
-Generated samples are saved as .png files and a .npz file under ./results/<exp-name>/samples/.
-
-### 5. Metrics
-Compute FID (torch-fidelity), Clean-FID and KID for all four experiments (A, B, C, D):
+| | REPA | cond-x1 |
+|---|---|---|
+| A | on | off |
+| B | on | on |
+| C | off | off |
+| D | off | on |
 
 ```bash
-bash bash_files/compute_metrics.sh
-```
+# 1. Prepare data (set KAGGLE_JSON first)
+bash run/produce_counterfactuals/prepare_data.sh
 
-Make sure reference images exist at `./data/chexpert_256_sdvae/images/train/` before running, these are created automatically by `bash bash_files/prepare_data.sh`.
+# 2. Train all four experiments (set TEACHER_CKPT first)
+bash run/produce_counterfactuals/train.sh        # SiT-S/4, 400k steps
+bash run/produce_counterfactuals/train.sh -1     # SiT-B/2
+bash run/produce_counterfactuals/train.sh -s     # sanity check
+
+# 3. Generate counterfactuals (Healthy → Pleural Effusion)
+bash run/produce_counterfactuals/generate.sh
+bash run/produce_counterfactuals/generate.sh -s
+
+# 4. Compute metrics (FID, KID, AUC, SSIM, PSNR, LPIPS)
+bash run/produce_counterfactuals/compute_metrics.sh
+```
