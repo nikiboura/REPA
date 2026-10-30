@@ -212,7 +212,8 @@ def download_chexpert(chexpert_root, kaggle_json=None):
         kaggle_dir = os.path.expanduser('~/.kaggle')
         os.makedirs(kaggle_dir, exist_ok=True)
         dest = os.path.join(kaggle_dir, 'kaggle.json')
-        shutil.copy(kaggle_json, dest)
+        if os.path.abspath(kaggle_json) != os.path.abspath(dest):
+            shutil.copy(kaggle_json, dest)
         os.chmod(dest, 0o600)
     os.makedirs(chexpert_root, exist_ok=True)
     print('Downloading CheXpert from Kaggle')

@@ -13,12 +13,14 @@ else
 fi
 
 cd third_party/UNSB
+# --mode omitted: see the comment in train.sh -- defaults to "sb" already,
+# UNSB's own choices= for --mode is a buggy string (not a list), so passing
+# it explicitly on the CLI gets rejected.
 python test.py \
   --dataroot $UNSB_DATA_DIR \
   --checkpoints_dir $CHECKPOINTS_DIR \
   --results_dir $UNSB_RESULTS_DIR \
   --name $EXP_NAME \
-  --mode sb \
   --direction AtoB \
   --phase test \
   --epoch latest \

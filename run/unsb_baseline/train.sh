@@ -14,12 +14,16 @@ fi
 
 # UNSB (Unpaired Neural Schrodinger Bridge), Healthy (A) -> Pleural Effusion (B),
 # as an unpaired-translation baseline to compare against the I2SB/REPA counterfactual pipeline.
+# --mode is deliberately omitted: it defaults to "sb" already, and UNSB's own
+# options/sb_model.py has `choices='(FastCUT, fastcut, sb)'` -- a string, not a
+# list, so argparse reads it as the individual characters '(', 'F', 'a', ... and
+# rejects any value explicitly passed on the CLI. Defaults bypass choices
+# validation, so relying on the default sidesteps their bug without patching it.
 cd third_party/UNSB
 python train.py \
   --dataroot $UNSB_DATA_DIR \
   --checkpoints_dir $CHECKPOINTS_DIR \
   --name $EXP_NAME \
-  --mode sb \
   --direction AtoB \
   --lambda_SB 1.0 \
   --lambda_NCE 1.0 \
