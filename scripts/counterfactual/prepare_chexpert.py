@@ -131,6 +131,7 @@ def _print_class_counts(df, label_names):
 
 def process_split(df, chexpert_root, out_dir, split, resolution,
                   vae, device, batch_size, pathologies, max_samples=None):
+    skip_vae = vae is None
     images_dir = os.path.join(out_dir, 'images', split)
     features_dir = os.path.join(out_dir, 'vae-sd', split)
     os.makedirs(images_dir, exist_ok=True)
@@ -179,19 +180,27 @@ def process_split(df, chexpert_root, out_dir, split, resolution,
         if not imgs:
             continue
 
-        tensors = torch.stack([to_tensor(img) for img in imgs])
-        moments = encode_batch(vae, tensors, device)
+        if skip_vae:
+            moments = [None] * len(imgs)
+        else:
+            tensors = torch.stack([to_tensor(img) for img in imgs])
+            moments = encode_batch(vae, tensors, device)
 
         for img, label, moment in zip(imgs, labels, moments):
             idx = len(labels_meta)
             img.save(os.path.join(images_dir, f'{idx}.png'))
-            np.save(os.path.join(features_dir, f'{idx}.npy'), moment)
+            if not skip_vae:
+                np.save(os.path.join(features_dir, f'{idx}.npy'), moment)
             labels_meta.append([f'{idx}.npy', label])
 
+    # dataset.json (label lookup) is written even with --skip-vae, since
+    # build_unsb_dataset.py and other consumers only need the label map --
+    # it's the .npy arrays themselves that are skipped.
     with open(os.path.join(features_dir, 'dataset.json'), 'w') as f:
         json.dump({'labels': labels_meta}, f)
 
-    print(f'[{split}] saved {len(labels_meta)} images and VAE latents to {out_dir}')
+    suffix = 'images (VAE latents skipped)' if skip_vae else 'images and VAE latents'
+    print(f'[{split}] saved {len(labels_meta)} {suffix} to {out_dir}')
     return len(labels_meta)
 
 
@@ -233,6 +242,10 @@ def main():
     parser.add_argument('--test-size', type=int, default=500,
                         help='Number of rows to sample per label (Healthy and each pathology) '
                              'for the test split.')
+    parser.add_argument('--skip-vae', action='store_true',
+                        help='Skip loading/running the VAE entirely -- only write resized PNGs '
+                             'and the label dataset.json. Use this when the downstream model '
+                             '(e.g. UNSB) trains in pixel space and never reads the latents.')
     args = parser.parse_args()
 
     download_chexpert(args.chexpert_root, args.kaggle_json)
@@ -245,8 +258,12 @@ def main():
     print(f'Using device: {device}')
     print(f'Target pathologies: {args.pathologies}')
 
-    print('Loading VAE...')
-    vae = load_vae(args.vae_type, device)
+    if args.skip_vae:
+        print('--skip-vae set: not loading a VAE, latents will not be written.')
+        vae = None
+    else:
+        print('Loading VAE...')
+        vae = load_vae(args.vae_type, device)
 
     df = pd.read_csv(os.path.join(args.chexpert_root, 'train.csv'))
     if 'Frontal/Lateral' in df.columns:

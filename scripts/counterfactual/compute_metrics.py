@@ -161,6 +161,9 @@ def main():
     parser.add_argument('--report-to', type=str, default='none', choices=['none', 'wandb'])
     parser.add_argument('--wandb-project', type=str, default='REPA')
     parser.add_argument('--wandb-name', type=str, default=None)
+    parser.add_argument('--skip-latents', action='store_true',
+                        help='Skip the latent-based AUC metric (needs a VAE-encoded --data-dir). '
+                             'Reports FID/KID/SSIM/PSNR/LPIPS only -- none of those need latents.')
     args = parser.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -192,71 +195,75 @@ def main():
         print('Computing KID...')
         kid_score = fid.compute_kid(fdir1=gen_pe_dir, dataset_name=stats_name, dataset_split='custom', mode='clean', device=device)
 
-        #AUC: train a Healthy-vs-PE classifier on real latents
-        print('\nTraining pathology classifier on real latents...')
-        dataset = LatentDataset(args.data_dir, split=args.split)
-        idx = np.arange(len(dataset))
-        rng = np.random.RandomState(args.seed)
-        rng.shuffle(idx)
-        n_val = int(len(dataset) * args.val_frac)
-        val_idx, train_idx = idx[:n_val], idx[n_val:]
+        if args.skip_latents:
+            print('\n--skip-latents set: skipping the latent-based AUC metric.')
+            generated_auc = float('nan')
+        else:
+            #AUC: train a Healthy-vs-PE classifier on real latents
+            print('\nTraining pathology classifier on real latents...')
+            dataset = LatentDataset(args.data_dir, split=args.split)
+            idx = np.arange(len(dataset))
+            rng = np.random.RandomState(args.seed)
+            rng.shuffle(idx)
+            n_val = int(len(dataset) * args.val_frac)
+            val_idx, train_idx = idx[:n_val], idx[n_val:]
 
-        X_train, y_train = latent_means(dataset, train_idx)
-        X_val, y_val = latent_means(dataset, val_idx)
+            X_train, y_train = latent_means(dataset, train_idx)
+            X_val, y_val = latent_means(dataset, val_idx)
 
-        clf = LatentClassifier(in_channels=X_train.shape[1]).to(device)
-        opt = torch.optim.Adam(clf.parameters(), lr=1e-3)
-        loss_fn = nn.BCEWithLogitsLoss()
+            clf = LatentClassifier(in_channels=X_train.shape[1]).to(device)
+            opt = torch.optim.Adam(clf.parameters(), lr=1e-3)
+            loss_fn = nn.BCEWithLogitsLoss()
 
-        X_train, y_train = X_train.to(device), y_train.to(device)
-        X_val, y_val = X_val.to(device), y_val.to(device)
+            X_train, y_train = X_train.to(device), y_train.to(device)
+            X_val, y_val = X_val.to(device), y_val.to(device)
 
-        for epoch in range(args.epochs):
-            clf.train()
-            perm = torch.randperm(len(X_train))
-            total_loss = 0.
-            for start in range(0, len(X_train), args.batch_size):
-                b = perm[start:start + args.batch_size]
-                opt.zero_grad()
-                loss = loss_fn(clf(X_train[b]), y_train[b])
-                loss.backward()
-                opt.step()
-                total_loss += loss.item() * len(b)
-            print(f'  epoch {epoch + 1}/{args.epochs}  loss={total_loss / len(X_train):.4f}')
+            for epoch in range(args.epochs):
+                clf.train()
+                perm = torch.randperm(len(X_train))
+                total_loss = 0.
+                for start in range(0, len(X_train), args.batch_size):
+                    b = perm[start:start + args.batch_size]
+                    opt.zero_grad()
+                    loss = loss_fn(clf(X_train[b]), y_train[b])
+                    loss.backward()
+                    opt.step()
+                    total_loss += loss.item() * len(b)
+                print(f'  epoch {epoch + 1}/{args.epochs}  loss={total_loss / len(X_train):.4f}')
 
-        clf.eval()
-        with torch.no_grad():
-            val_scores = torch.sigmoid(clf(X_val)).cpu().numpy()
-        real_auc = compute_auc(val_scores, y_val.cpu().numpy())
+            clf.eval()
+            with torch.no_grad():
+                val_scores = torch.sigmoid(clf(X_val)).cpu().numpy()
+            real_auc = compute_auc(val_scores, y_val.cpu().numpy())
 
-        #Score generated PE images with the same classifier
-        print('\nEncoding generated PE images through the VAE for classifier scoring...')
-        vae = AutoencoderKL.from_pretrained('stabilityai/sd-vae-ft-mse').to(device).eval()
-        to_tensor = transforms.Compose([
-            transforms.Resize((args.resolution, args.resolution)),
-            transforms.ToTensor(),
-            transforms.Normalize([0.5] * 3, [0.5] * 3),
-        ])
+            #Score generated PE images with the same classifier
+            print('\nEncoding generated PE images through the VAE for classifier scoring...')
+            vae = AutoencoderKL.from_pretrained('stabilityai/sd-vae-ft-mse').to(device).eval()
+            to_tensor = transforms.Compose([
+                transforms.Resize((args.resolution, args.resolution)),
+                transforms.ToTensor(),
+                transforms.Normalize([0.5] * 3, [0.5] * 3),
+            ])
 
-        gen_files = sorted(f for f in os.listdir(gen_pe_dir) if f.endswith('.png'))
-        gen_means = []
-        with torch.no_grad():
-            for start in range(0, len(gen_files), args.batch_size):
-                batch_files = gen_files[start:start + args.batch_size]
-                imgs = torch.stack([
-                    to_tensor(Image.open(os.path.join(gen_pe_dir, f)).convert('RGB'))
-                    for f in batch_files
-                ]).to(device)
-                gen_means.append(vae.encode(imgs).latent_dist.mean.cpu())
-        gen_means = torch.cat(gen_means).to(device)
+            gen_files = sorted(f for f in os.listdir(gen_pe_dir) if f.endswith('.png'))
+            gen_means = []
+            with torch.no_grad():
+                for start in range(0, len(gen_files), args.batch_size):
+                    batch_files = gen_files[start:start + args.batch_size]
+                    imgs = torch.stack([
+                        to_tensor(Image.open(os.path.join(gen_pe_dir, f)).convert('RGB'))
+                        for f in batch_files
+                    ]).to(device)
+                    gen_means.append(vae.encode(imgs).latent_dist.mean.cpu())
+            gen_means = torch.cat(gen_means).to(device)
 
-        #Real Healthy held-out latents 
-        real_healthy_val = X_val[y_val == 0]
-        eval_X = torch.cat([real_healthy_val, gen_means])
-        eval_y = np.concatenate([np.zeros(len(real_healthy_val)), np.ones(len(gen_means))])
-        with torch.no_grad():
-            eval_scores = torch.sigmoid(clf(eval_X)).cpu().numpy()
-        generated_auc = compute_auc(eval_scores, eval_y)
+            #Real Healthy held-out latents
+            real_healthy_val = X_val[y_val == 0]
+            eval_X = torch.cat([real_healthy_val, gen_means])
+            eval_y = np.concatenate([np.zeros(len(real_healthy_val)), np.ones(len(gen_means))])
+            with torch.no_grad():
+                eval_scores = torch.sigmoid(clf(eval_X)).cpu().numpy()
+            generated_auc = compute_auc(eval_scores, eval_y)
 
         #Pair similarity: Healthy source vs its generated PE counterfactual
         print('\nComputing Healthy vs generated-PE pair similarity...')

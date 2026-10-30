@@ -102,12 +102,17 @@ same unpaired Healthy → Pleural Effusion translation problem as `produce_count
 an adversarially-trained Schrödinger Bridge instead of our REPA/I2SB diffusion pipeline. Used here as
 a baseline for comparison. The official repo is vendored as a submodule at `third_party/UNSB`.
 
+UNSB trains in pixel space and never reads VAE latents, so this pipeline builds its own lean
+`chexpert_256_unsb` split (`--skip-vae`: resized PNGs + labels, no SD-VAE download/encoding) rather
+than reusing `chexpert_256_sdvae` -- much faster, and standalone from `produce_counterfactuals/`.
+`compute_metrics.sh` runs with `--skip-latents` to match: FID/KID/SSIM/PSNR/LPIPS don't need
+latents either, only the AUC metric does (see that script's comments for how to get AUC too).
+
 ```bash
 # 0. Fetch the UNSB submodule + its extra deps (dominate, visdom, gputil, packaging)
 bash run/unsb_baseline/install.sh
 
-# 1. Re-sort the existing chexpert_256_sdvae images into UNSB's trainA/trainB/testA/testB layout
-#    (requires run/produce_counterfactuals/prepare_data.sh to have been run first)
+# 1. Build a lean Healthy/Pleural-Effusion split (no VAE) + UNSB's trainA/trainB/testA/testB layout
 bash run/unsb_baseline/prepare_data.sh
 
 # 2. Train UNSB (Healthy -> Pleural Effusion, mode=sb, N=5 refinement steps)
@@ -119,7 +124,6 @@ bash run/unsb_baseline/train.sh -s     # sanity check
 bash run/unsb_baseline/generate.sh
 bash run/unsb_baseline/generate.sh -s
 
-# 4. Compute the same metrics (FID, KID, AUC, SSIM, PSNR, LPIPS) as produce_counterfactuals/,
-#    directly comparable across pipelines
+# 4. Compute metrics (FID, KID, SSIM, PSNR, LPIPS -- AUC skipped, see above)
 bash run/unsb_baseline/compute_metrics.sh
 ```
