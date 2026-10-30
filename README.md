@@ -92,3 +92,34 @@ bash run/produce_counterfactuals/generate.sh -s
 # 4. Compute metrics (FID, KID, AUC, SSIM, PSNR, LPIPS)
 bash run/produce_counterfactuals/compute_metrics.sh
 ```
+
+---
+
+## UNSB baseline (`run/unsb_baseline/`)
+
+[UNSB](https://github.com/cyclomon/UNSB) (Unpaired Neural Schrödinger Bridge, ICLR 2024) solves the
+same unpaired Healthy → Pleural Effusion translation problem as `produce_counterfactuals/`, but via
+an adversarially-trained Schrödinger Bridge instead of our REPA/I2SB diffusion pipeline. Used here as
+a baseline for comparison. The official repo is vendored as a submodule at `third_party/UNSB`.
+
+```bash
+# 0. Fetch the UNSB submodule + its extra deps (dominate, visdom, gputil, packaging)
+bash run/unsb_baseline/install.sh
+
+# 1. Re-sort the existing chexpert_256_sdvae images into UNSB's trainA/trainB/testA/testB layout
+#    (requires run/produce_counterfactuals/prepare_data.sh to have been run first)
+bash run/unsb_baseline/prepare_data.sh
+
+# 2. Train UNSB (Healthy -> Pleural Effusion, mode=sb, N=5 refinement steps)
+bash run/unsb_baseline/train.sh
+bash run/unsb_baseline/train.sh -s     # sanity check
+
+# 3. Generate counterfactuals at NFE=5 and reshape them to match compute_metrics.py's
+#    <idx>_healthy.png / <idx>_pe.png convention
+bash run/unsb_baseline/generate.sh
+bash run/unsb_baseline/generate.sh -s
+
+# 4. Compute the same metrics (FID, KID, AUC, SSIM, PSNR, LPIPS) as produce_counterfactuals/,
+#    directly comparable across pipelines
+bash run/unsb_baseline/compute_metrics.sh
+```

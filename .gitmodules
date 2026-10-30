@@ -1,0 +1,3 @@
+[submodule "third_party/UNSB"]
+	path = third_party/UNSB
+	url = https://github.com/cyclomon/UNSB.git
