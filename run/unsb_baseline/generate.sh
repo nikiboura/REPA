@@ -1,12 +1,14 @@
 #!/bin/bash
 
+set -euo pipefail
+
 UNSB_DATA_DIR="$(pwd)/data/chexpert_unsb"
 CHECKPOINTS_DIR="$(pwd)/results/unsb-chexpert-baseline/checkpoints"
 UNSB_RESULTS_DIR="$(pwd)/results/unsb-chexpert-baseline/unsb_raw"
 OUTPUT_DIR="$(pwd)/results/unsb-chexpert-baseline/counterfactuals"
 EXP_NAME="chexpert_h2pe_SB"
 
-if [ "$1" == "-s" ]; then
+if [ "${1:-}" == "-s" ]; then
     NUM_TEST=4
 else
     NUM_TEST=500

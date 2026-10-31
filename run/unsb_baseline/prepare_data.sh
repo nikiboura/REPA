@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 KAGGLE_JSON="$HOME/.kaggle/kaggle.json"
 CHEXPERT_ROOT="./data/chexpert"
 DATA_DIR="./data/chexpert_256_unsb"

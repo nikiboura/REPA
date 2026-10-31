@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 DATA_DIR="./data/chexpert_256_unsb"
 OUTPUT_DIR="./results"
 
