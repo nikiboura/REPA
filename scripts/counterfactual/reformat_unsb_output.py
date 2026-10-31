@@ -2,8 +2,13 @@
 reformat_unsb_output.py
 ------------------------
 UNSB's test.py saves, per source image `<idx>.png`:
-    results/<name>/test_<phase>_<epoch>/images/real_A/<idx>.png     (source, Healthy)
+    results/<name>/test_<phase>_<epoch>/images/real/<idx>.png       (source, Healthy)
     results/<name>/test_<phase>_<epoch>/images/fake_<t>/<idx>.png   (translated, after NFE=t steps)
+
+Note: at test time sb_model.py names the source-image visual 'real', not
+'real_A' -- that's only the training-time name (models/sb_model.py __init__:
+`self.visual_names = ['real_A', ...]` during train, but reassigned to
+`['real', 'fake_1', ...]` when `self.opt.phase == 'test'`).
 
 Our compute_metrics.py (used for the REPA/I2SB counterfactual pipeline) expects
 a single flat directory with paired filenames:
@@ -26,15 +31,15 @@ import os
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--unsb-results-dir', type=str, required=True,
-                        help="UNSB's .../test_<phase>_<epoch>/images directory (contains real_A/, fake_1/, ...)")
+                        help="UNSB's .../test_<phase>_<epoch>/images directory (contains real/, fake_1/, ...)")
     parser.add_argument('--out-dir', type=str, required=True)
     parser.add_argument('--nfe', type=int, default=None,
                         help='which fake_<nfe> folder to use as the final translation (default: highest available)')
     args = parser.parse_args()
 
-    real_a_dir = os.path.join(args.unsb_results_dir, 'real_A')
+    real_a_dir = os.path.join(args.unsb_results_dir, 'real')
     if not os.path.isdir(real_a_dir):
-        raise FileNotFoundError(f'{real_a_dir} not found -- did test.py run with --mode sb?')
+        raise FileNotFoundError(f'{real_a_dir} not found -- did test.py run successfully?')
 
     if args.nfe is None:
         nfes = []
