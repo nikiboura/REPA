@@ -15,8 +15,11 @@ a single flat directory with paired filenames:
     <idx>_healthy.png
     <idx>_pe.png
 
-This script symlinks UNSB's output into that shape so the same
-compute_metrics.py can score UNSB as a baseline, apples-to-apples.
+This script copies UNSB's output into that shape so the same compute_metrics.py
+can score UNSB as a baseline, apples-to-apples. Real copies, not symlinks:
+--out-dir is typically under results/, which may be a symlink onto Google
+Drive (see run/unsb_baseline/'s notebook) -- Drive's FUSE mount in Colab does
+not reliably support symlinks pointing at other Drive-hosted files.
 
 Usage:
     python scripts/counterfactual/reformat_unsb_output.py \
@@ -26,6 +29,7 @@ Usage:
 """
 import argparse
 import os
+import shutil
 
 
 def main():
@@ -68,10 +72,15 @@ def main():
             continue
         dst_healthy = os.path.join(args.out_dir, f'{stem}_healthy.png')
         dst_pe = os.path.join(args.out_dir, f'{stem}_pe.png')
-        if not os.path.exists(dst_healthy):
-            os.symlink(os.path.abspath(src_healthy), dst_healthy)
-        if not os.path.exists(dst_pe):
-            os.symlink(os.path.abspath(src_pe), dst_pe)
+        # lexists (not exists) + explicit removal: a stale/broken symlink from
+        # an older run -- or from before this script copied instead of
+        # symlinking -- would make plain exists() return False yet still
+        # collide on write, so always clear the destination first.
+        for dst in (dst_healthy, dst_pe):
+            if os.path.lexists(dst):
+                os.remove(dst)
+        shutil.copy2(src_healthy, dst_healthy)
+        shutil.copy2(src_pe, dst_pe)
         n += 1
 
     print(f'Wrote {n} healthy/pe pairs to {args.out_dir}')
