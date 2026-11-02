@@ -21,11 +21,25 @@ else
     # latest_net_*.pth current (every save_epoch_freq epochs, and mid-epoch via
     # save_latest_freq), so --continue_train (loads --epoch latest, the
     # default) is always safe; --epoch_count just tells its training loop
-    # where to resume counting, read from the last "End of epoch N" line in
-    # its own loss_log.txt.
+    # where to resume counting.
+    #
+    # Epoch number is read from loss_log.txt's "(epoch: N, iters: ...)" lines
+    # (written by util/visualizer.py's print_current_losses -- NOT the "End of
+    # epoch N" summary, which train.py only ever print()s to the console, never
+    # to the file, so grepping for that always found nothing). As a floor,
+    # also check for the highest numbered <N>_net_G.pth snapshot (written
+    # every save_epoch_freq epochs, so a fully reliable milestone) in case the
+    # log itself is ever missing -- take whichever signal is higher.
     if [ -f "$EXP_DIR/latest_net_G.pth" ]; then
-        LAST_EPOCH=$(grep -o '^End of epoch [0-9]*' "$EXP_DIR/loss_log.txt" 2>/dev/null | awk '{print $4}' | sort -n | tail -1) || true
-        LAST_EPOCH=${LAST_EPOCH:-0}
+        LOG_EPOCH=$(grep -oE '^\(epoch: [0-9]+' "$EXP_DIR/loss_log.txt" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1) || true
+        LOG_EPOCH=${LOG_EPOCH:-0}
+        SNAPSHOT_EPOCH=$(find "$EXP_DIR" -maxdepth 1 -name '[0-9]*_net_G.pth' -exec basename {} \; 2>/dev/null \
+            | sed 's/_net_G\.pth//' | sort -n | tail -1) || true
+        SNAPSHOT_EPOCH=${SNAPSHOT_EPOCH:-0}
+        LAST_EPOCH=$LOG_EPOCH
+        if [ "$SNAPSHOT_EPOCH" -gt "$LAST_EPOCH" ]; then
+            LAST_EPOCH=$SNAPSHOT_EPOCH
+        fi
         EPOCH_COUNT=$((LAST_EPOCH + 1))
         if [ "$EPOCH_COUNT" -gt "$((N_EPOCHS + N_EPOCHS_DECAY))" ]; then
             echo "Checkpoint already covers epoch $LAST_EPOCH >= target $((N_EPOCHS + N_EPOCHS_DECAY)) -- nothing to resume."
@@ -56,4 +70,5 @@ python train.py \
   --n_epochs $N_EPOCHS \
   --n_epochs_decay $N_EPOCHS_DECAY \
   --gpu_ids 0 \
+  --display_id 0 \
   "${RESUME_FLAGS[@]}"
