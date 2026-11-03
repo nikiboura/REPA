@@ -13,23 +13,15 @@ if [ "${1:-}" == "-s" ]; then
     N_EPOCHS=1
     N_EPOCHS_DECAY=0
 else
-    N_EPOCHS=400
-    N_EPOCHS_DECAY=0
+    # 200 + 200 = 400 total epochs, matching the paper: constant LR for the
+    # first 200, then linearly decayed to zero over the last 200 (this is
+    # also UNSB's own code default).
+    N_EPOCHS=200
+    N_EPOCHS_DECAY=200 
 
-    # Full run: if a checkpoint from an earlier (interrupted) session is sitting
-    # on Drive, resume from it instead of restarting. UNSB always keeps
-    # latest_net_*.pth current (every save_epoch_freq epochs, and mid-epoch via
-    # save_latest_freq), so --continue_train (loads --epoch latest, the
-    # default) is always safe; --epoch_count just tells its training loop
-    # where to resume counting.
-    #
-    # Epoch number is read from loss_log.txt's "(epoch: N, iters: ...)" lines
-    # (written by util/visualizer.py's print_current_losses -- NOT the "End of
-    # epoch N" summary, which train.py only ever print()s to the console, never
-    # to the file, so grepping for that always found nothing). As a floor,
-    # also check for the highest numbered <N>_net_G.pth snapshot (written
-    # every save_epoch_freq epochs, so a fully reliable milestone) in case the
-    # log itself is ever missing -- take whichever signal is higher.
+    # Resume from an earlier checkpoint if one exists. Epoch count comes from
+    # loss_log.txt's "(epoch: N, ...)" lines, floored by the highest numbered
+    # <N>_net_G.pth snapshot in case the log is missing.
     if [ -f "$EXP_DIR/latest_net_G.pth" ]; then
         LOG_EPOCH=$(grep -oE '^\(epoch: [0-9]+' "$EXP_DIR/loss_log.txt" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1) || true
         LOG_EPOCH=${LOG_EPOCH:-0}
@@ -50,13 +42,6 @@ else
     fi
 fi
 
-# UNSB (Unpaired Neural Schrodinger Bridge), Healthy (A) -> Pleural Effusion (B),
-# as an unpaired-translation baseline to compare against the I2SB/REPA counterfactual pipeline.
-# --mode is deliberately omitted: it defaults to "sb" already, and UNSB's own
-# options/sb_model.py has `choices='(FastCUT, fastcut, sb)'` -- a string, not a
-# list, so argparse reads it as the individual characters '(', 'F', 'a', ... and
-# rejects any value explicitly passed on the CLI. Defaults bypass choices
-# validation, so relying on the default sidesteps their bug without patching it.
 cd third_party/UNSB
 python train.py \
   --dataroot $UNSB_DATA_DIR \

@@ -2,24 +2,29 @@
 
 set -euo pipefail
 
-# Single install script for every experiment pipeline in this repo
-# (model_ablations/, produce_counterfactuals/, unsb_baseline/).
+# Point everything at a scratch disk: export SCRATCH_DIR=/path/to/scratch && bash install.sh
+# (also clone and run this repo itself from inside $SCRATCH_DIR, since every
+# script here saves data/checkpoints to repo-relative ./data and ./results)
 
-conda create -n repa python=3.9 -y
+if [ -n "${SCRATCH_DIR:-}" ]; then
+    mkdir -p "$SCRATCH_DIR/conda-envs" "$SCRATCH_DIR/caches/pip" "$SCRATCH_DIR/caches/huggingface" "$SCRATCH_DIR/caches/torch"
+    export PIP_CACHE_DIR="$SCRATCH_DIR/caches/pip" HF_HOME="$SCRATCH_DIR/caches/huggingface" TORCH_HOME="$SCRATCH_DIR/caches/torch"
+    CONDA_ENV="$SCRATCH_DIR/conda-envs/repa"
+    conda create --prefix "$CONDA_ENV" python=3.9 -y
+else
+    CONDA_ENV="repa"
+    conda create -n "$CONDA_ENV" python=3.9 -y
+fi
 
-# `conda activate` needs conda's shell functions loaded into the current
-# shell -- normally wired up by `conda init` into ~/.bash_profile, but that
-# file is only sourced by an interactive login shell, not by `bash install.sh`
-# running as a plain script. Source conda's hook directly instead, so this
-# works regardless of whether `conda init` has ever been run on this machine.
+# Lets `conda activate` work even if `conda init` was never run in this shell.
 source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate repa
+conda activate "$CONDA_ENV"
 
 pip install -r requirements.txt
 pip install medvae --no-deps
 
-# unsb_baseline/ only: pulls the UNSB submodule + its extra deps. UNSB's own
-# README pins an old torch/cu111 build, but the codebase has no hard
-# dependency on it -- the REPA env's torch above works fine.
+# For unsb_baseline/ only.
 git submodule update --init --recursive third_party/UNSB
 pip install dominate visdom gputil packaging
+
+echo "Done. Next time, activate with: conda activate $CONDA_ENV"
