@@ -25,6 +25,17 @@ conda activate repa
 One script for all three pipelines — conda env, Python deps, and the UNSB submodule + its extra deps.
 `conda activate repa` is needed again in every new terminal session (the env itself persists, the activation doesn't).
 
+On a shared machine with a small home-directory quota, redirect the conda env and all package/model
+caches to a bigger disk instead (and clone/run this repo itself from inside that same folder too):
+```bash
+export SCRATCH_DIR=/path/to/scratch
+cd $SCRATCH_DIR
+git clone https://github.com/nikiboura/REPA.git
+cd REPA
+bash install.sh
+```
+`install.sh` prints the exact `conda activate ...` command to use afterward — it won't be `conda activate repa` in this case.
+
 ### 3. Kaggle token
 Needed to download CheXpert and MedDINOv3 weights. Create one at https://www.kaggle.com/settings/api, then:
 ```bash
