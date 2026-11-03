@@ -40,9 +40,11 @@ bash install.sh
 Needed to download CheXpert and MedDINOv3 weights. Create one at https://www.kaggle.com/settings/api, then:
 ```bash
 mkdir -p ~/.kaggle
-mv ~/Downloads/kaggle.json ~/.kaggle/kaggle.json   # wherever you downloaded it to
+mv ~/Downloads/kaggle.json ~/.kaggle/kaggle.json
 chmod 600 ~/.kaggle/kaggle.json
 ```
+(if your browser saved it somewhere other than `~/Downloads`, adjust the source path above)
+
 Every `prepare_data.sh` in this repo defaults to `~/.kaggle/kaggle.json` — nothing else to set, unless your token lives somewhere else, in which case: `export KAGGLE_JSON=/path/to/kaggle.json` before running `prepare_data.sh`.
 
 ### 4. Teacher checkpoint
@@ -69,14 +71,16 @@ Four experiments isolating VAE choice and REPA, independently:
 
 ```bash
 # 1. Prepare data (uses ~/.kaggle/kaggle.json by default, see Setup above)
-bash run/model_ablations/prepare_data.sh        # 80k samples
-bash run/model_ablations/prepare_data.sh -1     # full dataset
-bash run/model_ablations/prepare_data.sh -s     # sanity check
+# no flag: 80k samples, -1: full dataset, -s: sanity check
+bash run/model_ablations/prepare_data.sh
+bash run/model_ablations/prepare_data.sh -1
+bash run/model_ablations/prepare_data.sh -s
 
 # 2. Train all four experiments (set TEACHER_CKPT first)
-bash run/model_ablations/train.sh               # SiT-S/4, 400k steps
-bash run/model_ablations/train.sh -1             # SiT-L/2, 4M steps
-bash run/model_ablations/train.sh -s             # sanity check
+# no flag: SiT-S/4, 400k steps, -1: SiT-L/2, 4M steps, -s: sanity check
+bash run/model_ablations/train.sh
+bash run/model_ablations/train.sh -1
+bash run/model_ablations/train.sh -s
 
 # 3. Generate samples
 bash run/model_ablations/generate.sh
@@ -105,13 +109,14 @@ Four experiments isolating REPA and `--cond-x1` (source-latent conditioning), in
 bash run/produce_counterfactuals/prepare_data.sh
 
 # 2. Train all four experiments (set TEACHER_CKPT first)
-bash run/produce_counterfactuals/train.sh        # SiT-S/4, 400k steps
-bash run/produce_counterfactuals/train.sh -1     # SiT-L/2
-bash run/produce_counterfactuals/train.sh -s     # sanity check
+# no flag: SiT-S/4, 400k steps, -1: SiT-L/2, -s: sanity check
+bash run/produce_counterfactuals/train.sh
+bash run/produce_counterfactuals/train.sh -1
+bash run/produce_counterfactuals/train.sh -s
 
 # 3. Generate counterfactuals (Healthy → Pleural Effusion)
 bash run/produce_counterfactuals/generate.sh
-bash run/produce_counterfactuals/generate.sh -1     # SiT-L/2
+bash run/produce_counterfactuals/generate.sh -1
 bash run/produce_counterfactuals/generate.sh -s
 
 # 4. Compute metrics (FID, KID, AUC, SSIM, PSNR, LPIPS)
@@ -127,11 +132,11 @@ same unpaired Healthy → Pleural Effusion translation problem as `produce_count
 an adversarially-trained Schrödinger Bridge instead of our REPA/I2SB diffusion pipeline. Used here as
 a baseline for comparison. The official repo is vendored as a submodule at `third_party/UNSB`.
 
-UNSB trains in pixel space and never reads VAE latents, so this pipeline builds its own 
+UNSB trains in pixel space and never reads VAE latents, so this pipeline builds its own
 `chexpert_256_unsb` split (`--skip-vae`: resized PNGs + labels, no SD-VAE download/encoding) for
-training `.
+training.
 `compute_metrics.sh` is the one that still needs `chexpert_256_sdvae` (built separately by
-`run/produce_counterfactuals/prepare_data.sh`) as its VAE latents are what the AUC metric needs. 
+`run/produce_counterfactuals/prepare_data.sh`) as its VAE latents are what the AUC metric needs.
 
 ```bash
 # (the UNSB submodule + its extra deps are already pulled by the root install.sh)
@@ -140,14 +145,15 @@ training `.
 bash run/unsb_baseline/prepare_data.sh
 
 # 2. Train UNSB (Healthy -> Pleural Effusion, mode=sb, N=5 refinement steps, 400 epochs)
+# -s: sanity check (1 epoch, skips resume logic)
 bash run/unsb_baseline/train.sh
-bash run/unsb_baseline/train.sh -s     # sanity check (1 epoch, skips resume logic)
+bash run/unsb_baseline/train.sh -s
 
 # 3. Generate counterfactuals at NFE=5 and reshape them to match compute_metrics.py's
-#    <idx>_healthy.png / <idx>_pe.png convention
+# <idx>_healthy.png / <idx>_pe.png convention (-s: sanity check)
 bash run/unsb_baseline/generate.sh
-bash run/unsb_baseline/generate.sh -s  # sanity check 
+bash run/unsb_baseline/generate.sh -s
 
-# 4. Compute metrics (FID, KID, SSIM, PSNR, LPIPS, AUC) 
+# 4. Compute metrics (FID, KID, SSIM, PSNR, LPIPS, AUC)
 bash run/unsb_baseline/compute_metrics.sh
 ```
