@@ -5,21 +5,13 @@ UNSB's test.py saves, per source image `<idx>.png`:
     results/<name>/test_<phase>_<epoch>/images/real/<idx>.png       (source, Healthy)
     results/<name>/test_<phase>_<epoch>/images/fake_<t>/<idx>.png   (translated, after NFE=t steps)
 
-Note: at test time sb_model.py names the source-image visual 'real', not
-'real_A' -- that's only the training-time name (models/sb_model.py __init__:
-`self.visual_names = ['real_A', ...]` during train, but reassigned to
-`['real', 'fake_1', ...]` when `self.opt.phase == 'test'`).
-
 Our compute_metrics.py (used for the REPA/I2SB counterfactual pipeline) expects
 a single flat directory with paired filenames:
     <idx>_healthy.png
     <idx>_pe.png
 
 This script copies UNSB's output into that shape so the same compute_metrics.py
-can score UNSB as a baseline, apples-to-apples. Real copies, not symlinks:
---out-dir is typically under results/, which may be a symlink onto Google
-Drive (see run/unsb_baseline/'s notebook) -- Drive's FUSE mount in Colab does
-not reliably support symlinks pointing at other Drive-hosted files.
+can score UNSB as a baseline. 
 
 Usage:
     python scripts/counterfactual/reformat_unsb_output.py \

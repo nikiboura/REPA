@@ -6,6 +6,13 @@ set -euo pipefail
 # (model_ablations/, produce_counterfactuals/, unsb_baseline/).
 
 conda create -n repa python=3.9 -y
+
+# `conda activate` needs conda's shell functions loaded into the current
+# shell -- normally wired up by `conda init` into ~/.bash_profile, but that
+# file is only sourced by an interactive login shell, not by `bash install.sh`
+# running as a plain script. Source conda's hook directly instead, so this
+# works regardless of whether `conda init` has ever been run on this machine.
+source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate repa
 
 pip install -r requirements.txt
