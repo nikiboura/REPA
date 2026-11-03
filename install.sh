@@ -23,8 +23,11 @@ conda activate "$CONDA_ENV"
 pip install -r requirements.txt
 pip install medvae --no-deps
 
-# For unsb_baseline/ only.
+# For unsb_baseline/ only. visdom is deliberately not installed -- UNSB's own
+# train.py only imports it when --display_id > 0, and our train.sh always
+# passes --display_id 0, so it's unused; skipping it avoids an old/unmaintained
+# package failing to build against newer setuptools (no pkg_resources).
 git submodule update --init --recursive third_party/UNSB
-pip install dominate visdom gputil packaging
+pip install dominate gputil packaging
 
 echo "Done. Next time, activate with: conda activate $CONDA_ENV"
