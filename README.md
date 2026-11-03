@@ -4,23 +4,24 @@ Vision Foundation-Guided Diffusion Models
 
 <b>Summary</b>: Repo is forked from https://github.com/sihyun-yu/REPA where Representation Alignment (REPA) is introduced to align noisy diffusion states with representations from pretrained visual encoders. We extend this with editing capabilities for counterfactual generation (Healthy → Pleural Effusion) on CheXpert.
 
-There are two separate experiment pipelines in this repo:
+There are three separate experiment pipelines in this repo:
 - **`run/model_ablations/`** — VAE choice × REPA ablation (does REPA help, does VAE choice matter).
 - **`run/produce_counterfactuals/`** — REPA × cond-x1 counterfactual generation (Healthy → Pleural Effusion).
+- **`run/unsb_baseline/`** — UNSB, an external unpaired-translation baseline for comparison.
 
 ## Setup
 
 ### 1. Clone repo
 ```bash
-git clone https://github.com/nikiboura/REPA.git
+git clone --recurse-submodules https://github.com/nikiboura/REPA.git
 cd REPA
 ```
 
 ### 2. Environment
 ```bash
-bash run/model_ablations/install.sh
+bash install.sh
 ```
-(Same install script works for both pipelines.)
+One script for all three pipelines — conda env, Python deps, and the UNSB submodule + its extra deps.
 
 ### 3. Kaggle token
 Needed to download CheXpert and MedDINOv3 weights. Create one at https://www.kaggle.com/settings/api and note the path — you'll set it as `KAGGLE_JSON` in each `prepare_data.sh`.
@@ -109,8 +110,7 @@ than reusing `chexpert_256_sdvae` -- much faster, and standalone from `produce_c
 latents either, only the AUC metric does (see that script's comments for how to get AUC too).
 
 ```bash
-# 0. Fetch the UNSB submodule + its extra deps (dominate, visdom, gputil, packaging)
-bash run/unsb_baseline/install.sh
+# (the UNSB submodule + its extra deps are already pulled by the root install.sh)
 
 # 1. Build a lean Healthy/Pleural-Effusion split (no VAE) + UNSB's trainA/trainB/testA/testB layout
 bash run/unsb_baseline/prepare_data.sh
