@@ -7,7 +7,7 @@ CHECKPOINTS_DIR="$(pwd)/results/unsb-chexpert-baseline/checkpoints"
 EXP_NAME="chexpert_h2pe_SB"
 
 EXP_DIR="$CHECKPOINTS_DIR/$EXP_NAME"
-RESUME_FLAGS=()
+RESUME_FLAGS=""
 
 if [ "${1:-}" == "-s" ]; then
     N_EPOCHS=1
@@ -46,7 +46,7 @@ else
             exit 0
         fi
         echo "Found existing checkpoint (last completed epoch: $LAST_EPOCH) -- resuming from epoch $EPOCH_COUNT"
-        RESUME_FLAGS=(--continue_train --epoch_count "$EPOCH_COUNT")
+        RESUME_FLAGS="--continue_train --epoch_count $EPOCH_COUNT"
     fi
 fi
 
@@ -71,4 +71,4 @@ python train.py \
   --n_epochs_decay $N_EPOCHS_DECAY \
   --gpu_ids 0 \
   --display_id 0 \
-  "${RESUME_FLAGS[@]}"
+  $RESUME_FLAGS

@@ -116,11 +116,11 @@ same unpaired Healthy → Pleural Effusion translation problem as `produce_count
 an adversarially-trained Schrödinger Bridge instead of our REPA/I2SB diffusion pipeline. Used here as
 a baseline for comparison. The official repo is vendored as a submodule at `third_party/UNSB`.
 
-UNSB trains in pixel space and never reads VAE latents, so this pipeline builds its own lean
-`chexpert_256_unsb` split (`--skip-vae`: resized PNGs + labels, no SD-VAE download/encoding) rather
-than reusing `chexpert_256_sdvae` -- much faster, and standalone from `produce_counterfactuals/`.
-`compute_metrics.sh` runs with `--skip-latents` to match: FID/KID/SSIM/PSNR/LPIPS don't need
-latents either, only the AUC metric does (see that script's comments for how to get AUC too).
+UNSB trains in pixel space and never reads VAE latents, so this pipeline builds its own 
+`chexpert_256_unsb` split (`--skip-vae`: resized PNGs + labels, no SD-VAE download/encoding) for
+training `.
+`compute_metrics.sh` is the one that still needs `chexpert_256_sdvae` (built separately by
+`run/produce_counterfactuals/prepare_data.sh`) as its VAE latents are what the AUC metric needs. 
 
 ```bash
 # (the UNSB submodule + its extra deps are already pulled by the root install.sh)
@@ -132,14 +132,11 @@ bash run/unsb_baseline/prepare_data.sh
 bash run/unsb_baseline/train.sh
 bash run/unsb_baseline/train.sh -s     # sanity check (1 epoch, skips resume logic)
 
-# Interrupted (Ctrl+C, session died, whatever)? Just rerun the exact same command --
-# it reads the last checkpoint + loss_log.txt and resumes automatically, no flags needed.
-
 # 3. Generate counterfactuals at NFE=5 and reshape them to match compute_metrics.py's
 #    <idx>_healthy.png / <idx>_pe.png convention
 bash run/unsb_baseline/generate.sh
-bash run/unsb_baseline/generate.sh -s
+bash run/unsb_baseline/generate.sh -s  # sanity check 
 
-# 4. Compute metrics (FID, KID, SSIM, PSNR, LPIPS -- AUC skipped, see above)
+# 4. Compute metrics (FID, KID, SSIM, PSNR, LPIPS, AUC) 
 bash run/unsb_baseline/compute_metrics.sh
 ```
