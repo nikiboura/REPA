@@ -64,7 +64,7 @@ bash run/model_ablations/prepare_data.sh -s     # sanity check
 
 # 2. Train all four experiments (set TEACHER_CKPT first)
 bash run/model_ablations/train.sh               # SiT-S/4, 400k steps
-bash run/model_ablations/train.sh -1             # SiT-B/2, 4M steps
+bash run/model_ablations/train.sh -1             # SiT-L/2, 4M steps
 bash run/model_ablations/train.sh -s             # sanity check
 
 # 3. Generate samples
@@ -95,11 +95,12 @@ bash run/produce_counterfactuals/prepare_data.sh
 
 # 2. Train all four experiments (set TEACHER_CKPT first)
 bash run/produce_counterfactuals/train.sh        # SiT-S/4, 400k steps
-bash run/produce_counterfactuals/train.sh -1     # SiT-B/2
+bash run/produce_counterfactuals/train.sh -1     # SiT-L/2
 bash run/produce_counterfactuals/train.sh -s     # sanity check
 
 # 3. Generate counterfactuals (Healthy → Pleural Effusion)
 bash run/produce_counterfactuals/generate.sh
+bash run/produce_counterfactuals/generate.sh -1     # SiT-L/2
 bash run/produce_counterfactuals/generate.sh -s
 
 # 4. Compute metrics (FID, KID, AUC, SSIM, PSNR, LPIPS)

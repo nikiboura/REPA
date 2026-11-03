@@ -3,7 +3,11 @@
 OUTPUT_DIR="./results"
 DATA_DIR="./data/chexpert_256_sdvae"
 
-if [ "$1" == "-s" ]; then
+if [ "$1" == "-1" ]; then
+    MODEL="SiT-L/2"
+    CKPT_STEP="0400000"
+    NUM_SAMPLES=500
+elif [ "$1" == "-s" ]; then
     MODEL="SiT-S/4"
     CKPT_STEP="0000002"
     NUM_SAMPLES=4

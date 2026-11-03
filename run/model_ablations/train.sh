@@ -4,7 +4,7 @@ TEACHER_CKPT="${TEACHER_CKPT:?Set TEACHER_CKPT first, e.g.: export TEACHER_CKPT=
 OUTPUT_DIR="./results"
 
 if [ "$1" == "-1" ]; then
-    MODEL="SiT-B/2"
+    MODEL="SiT-L/2"
     MAX_STEPS=4000000
     CKPT_STEPS=4000000
 elif [ "$1" == "-s" ]; then
