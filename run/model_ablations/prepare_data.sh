@@ -1,7 +1,7 @@
 #!/bin/bash
 
 MAX_SAMPLES=80000
-KAGGLE_JSON="/path/to/kaggle.json"
+KAGGLE_JSON="${KAGGLE_JSON:-$HOME/.kaggle/kaggle.json}"
 
 if [ "$1" == "-1" ]; then
     MAX_SAMPLES_ARG=""

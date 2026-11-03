@@ -13,23 +13,35 @@ There are three separate experiment pipelines in this repo:
 
 ### 1. Clone repo
 ```bash
-git clone --recurse-submodules https://github.com/nikiboura/REPA.git
+git clone https://github.com/nikiboura/REPA.git
 cd REPA
 ```
 
 ### 2. Environment
 ```bash
 bash install.sh
+conda activate repa
 ```
 One script for all three pipelines — conda env, Python deps, and the UNSB submodule + its extra deps.
+`conda activate repa` is needed again in every new terminal session (the env itself persists, the activation doesn't).
 
 ### 3. Kaggle token
-Needed to download CheXpert and MedDINOv3 weights. Create one at https://www.kaggle.com/settings/api and note the path — you'll set it as `KAGGLE_JSON` in each `prepare_data.sh`.
+Needed to download CheXpert and MedDINOv3 weights. Create one at https://www.kaggle.com/settings/api, then:
+```bash
+mkdir -p ~/.kaggle
+mv ~/Downloads/kaggle.json ~/.kaggle/kaggle.json   # wherever you downloaded it to
+chmod 600 ~/.kaggle/kaggle.json
+```
+Every `prepare_data.sh` in this repo defaults to `~/.kaggle/kaggle.json` — nothing else to set, unless your token lives somewhere else, in which case: `export KAGGLE_JSON=/path/to/kaggle.json` before running `prepare_data.sh`.
 
 ### 4. Teacher checkpoint
 Used for weight-selection initialization from SiT-XL/2 (https://github.com/OscarXZQ/weight-selection). Download: https://www.dl.dropboxusercontent.com/scl/fi/cxedbs4da5ugjq5wg3zrg/last.pt?rlkey=8otgrdkno0nd89po3dpwngwcc&st=apcc645o&dl=0
 
-Set this as `TEACHER_CKPT` in each `train.sh`.
+Only needed for `model_ablations/` and `produce_counterfactuals/` (not `unsb_baseline/`). Before running either's `train.sh`:
+```bash
+export TEACHER_CKPT=/path/to/last.pt
+```
+(`train.sh` errors out immediately with a clear message if this isn't set — no silent failures.)
 
 ---
 
@@ -45,7 +57,7 @@ Four experiments isolating VAE choice and REPA, independently:
 | D | SD | on |
 
 ```bash
-# 1. Prepare data (set KAGGLE_JSON first)
+# 1. Prepare data (uses ~/.kaggle/kaggle.json by default, see Setup above)
 bash run/model_ablations/prepare_data.sh        # 80k samples
 bash run/model_ablations/prepare_data.sh -1     # full dataset
 bash run/model_ablations/prepare_data.sh -s     # sanity check
@@ -78,7 +90,7 @@ Four experiments isolating REPA and `--cond-x1` (source-latent conditioning), in
 | D | off | on |
 
 ```bash
-# 1. Prepare data (set KAGGLE_JSON first)
+# 1. Prepare data (uses ~/.kaggle/kaggle.json by default, see Setup above)
 bash run/produce_counterfactuals/prepare_data.sh
 
 # 2. Train all four experiments (set TEACHER_CKPT first)
@@ -115,9 +127,12 @@ latents either, only the AUC metric does (see that script's comments for how to 
 # 1. Build a lean Healthy/Pleural-Effusion split (no VAE) + UNSB's trainA/trainB/testA/testB layout
 bash run/unsb_baseline/prepare_data.sh
 
-# 2. Train UNSB (Healthy -> Pleural Effusion, mode=sb, N=5 refinement steps)
+# 2. Train UNSB (Healthy -> Pleural Effusion, mode=sb, N=5 refinement steps, 400 epochs)
 bash run/unsb_baseline/train.sh
-bash run/unsb_baseline/train.sh -s     # sanity check
+bash run/unsb_baseline/train.sh -s     # sanity check (1 epoch, skips resume logic)
+
+# Interrupted (Ctrl+C, session died, whatever)? Just rerun the exact same command --
+# it reads the last checkpoint + loss_log.txt and resumes automatically, no flags needed.
 
 # 3. Generate counterfactuals at NFE=5 and reshape them to match compute_metrics.py's
 #    <idx>_healthy.png / <idx>_pe.png convention

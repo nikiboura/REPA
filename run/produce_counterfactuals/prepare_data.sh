@@ -1,5 +1,5 @@
 #!/bin/bash
-KAGGLE_JSON="/path/to/kaggle.json"
+KAGGLE_JSON="${KAGGLE_JSON:-$HOME/.kaggle/kaggle.json}"
 
 # Preparation script for counterfactual generation
 # Only pleuran effusion / healthy patients are downloaded

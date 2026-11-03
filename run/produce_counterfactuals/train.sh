@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TEACHER_CKPT="/path/to/last.pt"
+TEACHER_CKPT="${TEACHER_CKPT:?Set TEACHER_CKPT first, e.g.: export TEACHER_CKPT=/path/to/last.pt}"
 OUTPUT_DIR="./results"
 
 if [ "$1" == "-1" ]; then
