@@ -25,8 +25,7 @@ conda activate repa
 One script for all three pipelines — conda env, Python deps, and the UNSB submodule + its extra deps.
 `conda activate repa` is needed again in every new terminal session (the env itself persists, the activation doesn't).
 
-On a shared machine with a small home-directory quota, redirect the conda env and all package/model
-caches to a bigger disk instead (and clone/run this repo itself from inside that same folder too):
+On a shared machine, redirect the conda env and all package/model (and clone/run this repo itself from inside that same folder too):
 ```bash
 export SCRATCH_DIR=/path/to/scratch
 cd $SCRATCH_DIR
