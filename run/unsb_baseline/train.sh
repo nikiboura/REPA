@@ -19,26 +19,34 @@ else
     N_EPOCHS=200
     N_EPOCHS_DECAY=200 
 
-    # Resume from an earlier checkpoint if one exists. Epoch count comes from
-    # loss_log.txt's "(epoch: N, ...)" lines, floored by the highest numbered
-    # <N>_net_G.pth snapshot in case the log is missing.
-    if [ -f "$EXP_DIR/latest_net_G.pth" ]; then
-        LOG_EPOCH=$(grep -oE '^\(epoch: [0-9]+' "$EXP_DIR/loss_log.txt" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1) || true
-        LOG_EPOCH=${LOG_EPOCH:-0}
-        SNAPSHOT_EPOCH=$(find "$EXP_DIR" -maxdepth 1 -name '[0-9]*_net_G.pth' -exec basename {} \; 2>/dev/null \
-            | sed 's/_net_G\.pth//' | sort -n | tail -1) || true
-        SNAPSHOT_EPOCH=${SNAPSHOT_EPOCH:-0}
-        LAST_EPOCH=$LOG_EPOCH
-        if [ "$SNAPSHOT_EPOCH" -gt "$LAST_EPOCH" ]; then
-            LAST_EPOCH=$SNAPSHOT_EPOCH
-        fi
-        EPOCH_COUNT=$((LAST_EPOCH + 1))
-        if [ "$EPOCH_COUNT" -gt "$((N_EPOCHS + N_EPOCHS_DECAY))" ]; then
-            echo "Checkpoint already covers epoch $LAST_EPOCH >= target $((N_EPOCHS + N_EPOCHS_DECAY)) -- nothing to resume."
+    # Resume from the highest numbered <N>_net_G.pth snapshot. UNSB writes these
+    # at the end of every 5th epoch (--save_epoch_freq), together with
+    # <N>_net_{F,D,E}.pth, so N is known to be a fully completed epoch. We load
+    # that snapshot explicitly (--epoch N) rather than latest_net_*.pth, which
+    # is also overwritten mid-epoch every 5000 iters and so belongs to an
+    # unknown, partially trained epoch -- pairing it with an epoch count read
+    # from loss_log.txt would silently skip epochs and advance the LR schedule.
+    # At most 4 epochs of progress are redone. (UNSB doesn't save optimizer
+    # state, so Adam restarts on resume either way -- upstream behavior.)
+    SNAPSHOT_EPOCH=$(find "$EXP_DIR" -maxdepth 1 -name '[0-9]*_net_G.pth' -exec basename {} \; 2>/dev/null \
+        | sed 's/_net_G\.pth//' | sort -n | tail -1) || true
+    SNAPSHOT_EPOCH=${SNAPSHOT_EPOCH:-0}
+    if [ "$SNAPSHOT_EPOCH" -gt 0 ]; then
+        for NET in F D E; do
+            if [ ! -f "$EXP_DIR/${SNAPSHOT_EPOCH}_net_${NET}.pth" ]; then
+                echo "ERROR: $EXP_DIR/${SNAPSHOT_EPOCH}_net_${NET}.pth missing -- incomplete snapshot." >&2
+                exit 1
+            fi
+        done
+        if [ "$SNAPSHOT_EPOCH" -ge "$((N_EPOCHS + N_EPOCHS_DECAY))" ]; then
+            echo "Snapshot already covers epoch $SNAPSHOT_EPOCH >= target $((N_EPOCHS + N_EPOCHS_DECAY)) -- nothing to resume."
             exit 0
         fi
-        echo "Found existing checkpoint (last completed epoch: $LAST_EPOCH) -- resuming from epoch $EPOCH_COUNT"
-        RESUME_FLAGS="--continue_train --epoch_count $EPOCH_COUNT"
+        EPOCH_COUNT=$((SNAPSHOT_EPOCH + 1))
+        echo "Found snapshot of completed epoch $SNAPSHOT_EPOCH -- resuming from epoch $EPOCH_COUNT"
+        RESUME_FLAGS="--continue_train --epoch $SNAPSHOT_EPOCH --epoch_count $EPOCH_COUNT"
+    elif [ -f "$EXP_DIR/latest_net_G.pth" ]; then
+        echo "Only latest_net_*.pth found (stopped before epoch 5) -- its epoch is unknown, training from scratch."
     fi
 fi
 

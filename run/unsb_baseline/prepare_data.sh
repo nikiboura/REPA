@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-KAGGLE_JSON="$HOME/.kaggle/kaggle.json"
+KAGGLE_JSON="${KAGGLE_JSON:-$HOME/.kaggle/kaggle.json}"
 CHEXPERT_ROOT="./data/chexpert"
 DATA_DIR="./data/chexpert_256_unsb"
 UNSB_DATA_DIR="./data/chexpert_unsb"
