@@ -1,0 +1,19 @@
+UNSB's UnalignedDataset always loads images as 3-channel RGB and ignores
+--input_nc, so a grayscale run is impossible out of the box (the original
+CycleGAN/CUT code it derives from does pass grayscale=(input_nc == 1)).
+Restores that: with --input_nc 1 images are loaded as single-channel.
+Applied automatically by run/unsb_baseline/{train,generate}.sh.
+
+diff --git a/data/unaligned_dataset.py b/data/unaligned_dataset.py
+index de3363c..372821a 100644
+--- a/data/unaligned_dataset.py
++++ b/data/unaligned_dataset.py
+@@ -63,7 +63,7 @@ class UnalignedDataset(BaseDataset):
+         # do not perform resize-crop data augmentation of CycleGAN.
+         is_finetuning = self.opt.isTrain and self.current_epoch > self.opt.n_epochs
+         modified_opt = util.copyconf(self.opt, load_size=self.opt.crop_size if is_finetuning else self.opt.load_size)
+-        transform = get_transform(modified_opt)
++        transform = get_transform(modified_opt, grayscale=(self.opt.input_nc == 1))
+         A = transform(A_img)
+         B = transform(B_img)
+ 

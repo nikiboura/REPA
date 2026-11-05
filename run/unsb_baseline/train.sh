@@ -5,6 +5,10 @@ set -euo pipefail
 UNSB_DATA_DIR="$(pwd)/data/chexpert_unsb"
 CHECKPOINTS_DIR="$(pwd)/results/unsb-chexpert-baseline/checkpoints"
 EXP_NAME="chexpert_h2pe_SB"
+# X-rays are grayscale: train single-channel (--input_nc/--output_nc 1) so the
+# generator can't produce false color. UNSB's dataset ignores --input_nc, so
+# this patch makes it load images as 1-channel.
+PATCH="$(pwd)/patches/unsb_grayscale.patch"
 
 EXP_DIR="$CHECKPOINTS_DIR/$EXP_NAME"
 RESUME_FLAGS=""
@@ -50,12 +54,20 @@ else
     fi
 fi
 
+# Apply the grayscale patch once (no-op if already applied).
+if ! git -C third_party/UNSB apply --reverse --check "$PATCH" 2>/dev/null; then
+    git -C third_party/UNSB apply "$PATCH"
+fi
+
 cd third_party/UNSB
 python train.py \
   --dataroot $UNSB_DATA_DIR \
   --checkpoints_dir $CHECKPOINTS_DIR \
   --name $EXP_NAME \
   --direction AtoB \
+  --input_nc 1 \
+  --output_nc 1 \
+  --no_flip \
   --lambda_SB 1.0 \
   --lambda_NCE 1.0 \
   --load_size 256 \

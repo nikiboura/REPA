@@ -7,11 +7,16 @@ CHECKPOINTS_DIR="$(pwd)/results/unsb-chexpert-baseline/checkpoints"
 UNSB_RESULTS_DIR="$(pwd)/results/unsb-chexpert-baseline/unsb_raw"
 OUTPUT_DIR="$(pwd)/results/unsb-chexpert-baseline/counterfactuals"
 EXP_NAME="chexpert_h2pe_SB"
+PATCH="$(pwd)/patches/unsb_grayscale.patch"
 
 if [ "${1:-}" == "-s" ]; then
     NUM_TEST=4
 else
     NUM_TEST=500
+fi
+
+if ! git -C third_party/UNSB apply --reverse --check "$PATCH" 2>/dev/null; then
+    git -C third_party/UNSB apply "$PATCH"
 fi
 
 cd third_party/UNSB
@@ -21,6 +26,8 @@ python test.py \
   --results_dir $UNSB_RESULTS_DIR \
   --name $EXP_NAME \
   --direction AtoB \
+  --input_nc 1 \
+  --output_nc 1 \
   --phase test \
   --epoch latest \
   --eval \

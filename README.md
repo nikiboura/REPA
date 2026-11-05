@@ -144,6 +144,7 @@ training.
 bash run/unsb_baseline/prepare_data.sh
 
 # 2. Train UNSB (Healthy -> Pleural Effusion, mode=sb, N=5 refinement steps, 400 epochs)
+# Grayscale (--input_nc/--output_nc 1) and --no_flip; patches/unsb_grayscale.patch is auto-applied.
 # -s: sanity check (1 epoch, skips resume logic)
 bash run/unsb_baseline/train.sh
 bash run/unsb_baseline/train.sh -s
